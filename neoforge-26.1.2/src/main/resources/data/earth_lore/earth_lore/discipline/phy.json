@@ -1,0 +1,8 @@
+{
+  "code": "PHY",
+  "order": 7,
+  "color": "#3E70DE",
+  "icon": "minecraft:lightning_rod",
+  "home_mod": "earth_physical_sciences",
+  "has_root": true
+}

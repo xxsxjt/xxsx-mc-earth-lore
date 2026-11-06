@@ -1,0 +1,22 @@
+{
+  "block.research_table.running": {
+    "subtitle": "subtitles.earth_lore.block.research_table.running",
+    "sounds": [{"name": "minecraft:entity.villager.work_cartographer", "type": "event", "volume": 0.6}]
+  },
+  "block.research_table.done": {
+    "subtitle": "subtitles.earth_lore.block.research_table.done",
+    "sounds": [{"name": "minecraft:ui.cartography_table.take_result", "type": "event"}]
+  },
+  "item.lore_text.study": {
+    "subtitle": "subtitles.earth_lore.item.lore_text.study",
+    "sounds": [{"name": "minecraft:item.book.page_turn", "type": "event"}]
+  },
+  "item.lore_text.learned": {
+    "subtitle": "subtitles.earth_lore.item.lore_text.learned",
+    "sounds": [{"name": "minecraft:entity.player.levelup", "type": "event"}]
+  },
+  "ui.lore.locked": {
+    "subtitle": "subtitles.earth_lore.ui.lore.locked",
+    "sounds": [{"name": "minecraft:block.chest.locked", "type": "event"}]
+  }
+}

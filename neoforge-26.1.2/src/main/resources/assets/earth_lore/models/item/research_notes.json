@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "earth_lore:item/research_notes",
+    "layer1": "earth_lore:item/research_notes_cover"
+  }
+}

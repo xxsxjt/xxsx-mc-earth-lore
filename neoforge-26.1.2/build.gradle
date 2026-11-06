@@ -1,0 +1,98 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = '0.1.0'
+group = 'com.xxsx.earthlore'
+base.archivesName = 'earth-lore-neoforge-26.1.2'
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+// Version-independent logic (no Minecraft imports) lives in ../common and is shared by every target.
+def commonRoot = layout.projectDirectory.dir('../common').asFile
+
+sourceSets {
+    main {
+        java { srcDir new File(commonRoot, 'src/main/java') }
+    }
+    test {
+        java { srcDir new File(commonRoot, 'src/test/java') }
+    }
+}
+
+neoForge {
+    version = '26.1.2.124'
+
+    // No client run on purpose: agents must never launch the game client (see workspace AGENTS.md).
+    runs {
+        server {
+            server()
+            gameDirectory = project.file('runs/server')
+            programArgument('--nogui')
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = project.file('runs/gametest')
+        }
+    }
+
+    mods {
+        earth_lore {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+repositories {
+    maven {
+        url = uri('https://maven.blamejared.com')
+        content {
+            includeGroup 'mezz.jei'
+        }
+    }
+    maven {
+        url = uri('https://maven.ftb.dev/releases')
+        content {
+            includeGroup 'dev.ftb.mods'
+        }
+    }
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly 'mezz.jei:jei-26.1.2-common-api:29.53.0.112'
+    compileOnly 'mezz.jei:jei-26.1.2-neoforge-api:29.53.0.112'
+    // Optional: only used by the isolated FTB Teams bridge when ftbteams is installed.
+    compileOnly 'dev.ftb.mods:ftb-teams-neoforge:26.1.2.5'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from('../LICENSE') {
+        into 'META-INF'
+    }
+    manifest {
+        attributes([
+            'Specification-Title'     : 'earth_lore',
+            'Specification-Vendor'    : 'xxsx',
+            'Specification-Version'   : '1',
+            'Implementation-Title'    : project.name,
+            'Implementation-Version'  : project.jar.archiveVersion,
+            'Implementation-Vendor'   : 'xxsx'
+        ])
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+

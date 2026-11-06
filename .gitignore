@@ -1,0 +1,28 @@
+# Gradle
+build/
+.gradle/
+run/
+runs/
+**/runs/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+*.iml
+.idea/
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+*.DS_Store
+Thumbs.db
+
+# Logs and local output
+logs/
+*.log
+tmp/
+output/
+local/
+*.local.*
+

@@ -1,0 +1,8 @@
+{
+  "code": "GEO",
+  "order": 0,
+  "color": "#8A5A32",
+  "icon": "minecraft:iron_ore",
+  "home_mod": "earth_on_minecraft",
+  "has_root": true
+}

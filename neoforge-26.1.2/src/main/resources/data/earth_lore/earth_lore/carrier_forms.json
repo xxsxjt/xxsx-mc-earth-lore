@@ -1,0 +1,8 @@
+{
+  "forms": [
+    {
+      "carrier": "earth_lore:blank_notes",
+      "result": "earth_lore:research_notes"
+    }
+  ]
+}

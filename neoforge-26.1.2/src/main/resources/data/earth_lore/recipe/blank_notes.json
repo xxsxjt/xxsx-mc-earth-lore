@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    "minecraft:paper",
+    "minecraft:paper",
+    "minecraft:paper",
+    "minecraft:ink_sac"
+  ],
+  "result": {
+    "id": "earth_lore:blank_notes",
+    "count": 2
+  }
+}

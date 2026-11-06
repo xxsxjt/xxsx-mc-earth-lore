@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "bonus_rolls": 0,
+      "conditions": [
+        {
+          "condition": "minecraft:survives_explosion"
+        }
+      ],
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "earth_lore:research_table"
+        }
+      ],
+      "rolls": 1
+    }
+  ],
+  "random_sequence": "earth_lore:blocks/research_table"
+}

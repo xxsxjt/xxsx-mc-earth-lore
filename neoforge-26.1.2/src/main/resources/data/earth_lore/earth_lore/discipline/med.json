@@ -1,0 +1,9 @@
+{
+  "code": "MED",
+  "order": 6,
+  "color": "#D23C48",
+  "icon": "minecraft:glistering_melon_slice",
+  "home_mod": "earth_life_sciences",
+  "base_mod": "earth_on_minecraft",
+  "has_root": true
+}

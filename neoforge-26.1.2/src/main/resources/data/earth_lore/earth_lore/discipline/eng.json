@@ -1,0 +1,8 @@
+{
+  "code": "ENG",
+  "order": 3,
+  "color": "#E5732A",
+  "icon": "minecraft:piston",
+  "home_mod": "earth_on_minecraft",
+  "has_root": true
+}

@@ -1,0 +1,46 @@
+modLoader="javafml"
+loaderVersion="[3,)"
+license="AGPL-3.0-only"
+
+[[mods]]
+modId="earth_lore"
+version="0.1.0"
+displayName="地球：学识 / Earth: Lore"
+description='''
+地球系列的学识框架：研究台、文献、知识存档、门禁接口与旧进度迁移入口。本身不含任何学科内容，知识节点由各学科 mod 用数据包提供。
+Knowledge framework for the Earth series: research table, literature, per-player knowledge, gating API and migration hooks. Ships no discipline content; subject mods provide knowledge nodes as data.
+'''
+authors="xxsx"
+logoBlur=false
+
+[[mixins]]
+config="earth_lore.mixins.json"
+
+[[dependencies.earth_lore]]
+modId="neoforge"
+type="required"
+versionRange="[26.1.2.124,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.earth_lore]]
+modId="minecraft"
+type="required"
+versionRange="[26.1.2]"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.earth_lore]]
+modId="ftbteams"
+type="optional"
+versionRange="[26.1.2.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.earth_lore]]
+modId="jei"
+type="optional"
+versionRange="[29.53.0.112,)"
+ordering="AFTER"
+side="CLIENT"
+

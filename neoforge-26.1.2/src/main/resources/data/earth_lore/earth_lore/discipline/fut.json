@@ -1,0 +1,8 @@
+{
+  "code": "FUT",
+  "order": 10,
+  "color": "#6B2A86",
+  "icon": "minecraft:end_crystal",
+  "home_mod": "earth_physical_sciences",
+  "has_root": false
+}

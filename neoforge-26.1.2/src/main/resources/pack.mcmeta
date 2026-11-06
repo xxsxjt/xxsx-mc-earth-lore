@@ -1,0 +1,13 @@
+{
+  "pack": {
+    "description": "Earth: Lore resources and data",
+    "min_format": [
+      84,
+      0
+    ],
+    "max_format": [
+      107,
+      1
+    ]
+  }
+}

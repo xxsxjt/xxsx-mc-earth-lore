@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "earth_lore:item/treatise",
+    "layer1": "earth_lore:item/treatise_cover"
+  }
+}

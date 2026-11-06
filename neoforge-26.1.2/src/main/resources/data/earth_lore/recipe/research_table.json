@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "P": "minecraft:paper",
+    "B": "minecraft:book",
+    "W": "#minecraft:planks",
+    "T": "minecraft:crafting_table"
+  },
+  "pattern": [
+    "PBP",
+    "WTW",
+    "W W"
+  ],
+  "result": {
+    "id": "earth_lore:research_table"
+  }
+}

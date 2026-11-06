@@ -1,0 +1,8 @@
+{
+  "code": "BIO",
+  "order": 5,
+  "color": "#4FAF4F",
+  "icon": "minecraft:egg",
+  "home_mod": "earth_life_sciences",
+  "has_root": true
+}

@@ -1,0 +1,8 @@
+{
+  "code": "CMP",
+  "order": 8,
+  "color": "#26B6D2",
+  "icon": "minecraft:comparator",
+  "home_mod": "earth_physical_sciences",
+  "has_root": true
+}

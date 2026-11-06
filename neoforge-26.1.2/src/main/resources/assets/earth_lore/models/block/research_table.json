@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "earth_lore:block/research_table_top",
+    "bottom": "minecraft:block/oak_planks",
+    "side": "earth_lore:block/research_table_side",
+    "particle": "earth_lore:block/research_table_side"
+  }
+}
