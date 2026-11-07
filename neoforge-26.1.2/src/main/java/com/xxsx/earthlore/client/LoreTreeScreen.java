@@ -22,6 +22,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.fml.ModList;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -83,11 +84,18 @@ public class LoreTreeScreen extends Screen {
     @Override
     protected void init() {
         LoreGraph graph = ClientKnowledge.graph();
-        tabs = graph.disciplineOrder();
+        tabs = visibleDisciplines(graph);
         if (current == null || !tabs.contains(current)) {
             current = lastDiscipline != null && tabs.contains(lastDiscipline) ? lastDiscipline : firstWithNodes(graph);
         }
         rebuild();
+    }
+
+    private static List<Identifier> visibleDisciplines(LoreGraph graph) {
+        return graph.disciplineOrder().stream()
+                .filter(id -> !graph.inDiscipline(id).isEmpty()
+                        || graph.discipline(id).map(d -> ModList.get().isLoaded(d.homeMod())).orElse(false))
+                .toList();
     }
 
     private Identifier firstWithNodes(LoreGraph graph) {
@@ -109,8 +117,11 @@ public class LoreTreeScreen extends Screen {
     private void rebuild() {
         LoreGraph graph = ClientKnowledge.graph();
         cachedVersion = ClientKnowledge.version();
+        tabs = visibleDisciplines(graph);
+        if (current != null && !tabs.contains(current)) {
+            current = firstWithNodes(graph);
+        }
         cachedDiscipline = current;
-        tabs = graph.disciplineOrder();
         if (current == null) {
             placed = List.of();
             byId = Map.of();
