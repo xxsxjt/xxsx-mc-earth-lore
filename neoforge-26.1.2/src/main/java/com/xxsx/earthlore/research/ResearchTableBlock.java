@@ -4,6 +4,8 @@ import com.xxsx.earthlore.registry.LoreContent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -40,6 +42,7 @@ public class ResearchTableBlock extends Block implements EntityBlock {
         }
         if (player instanceof ServerPlayer serverPlayer && level.getBlockEntity(pos) instanceof ResearchTableBlockEntity table) {
             serverPlayer.openMenu(table, buf -> buf.writeBlockPos(pos));
+            level.playSound(null, pos, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.5F, 1.05F);
         }
         return InteractionResult.SUCCESS_SERVER;
     }

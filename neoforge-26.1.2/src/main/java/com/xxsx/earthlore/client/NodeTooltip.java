@@ -2,12 +2,15 @@ package com.xxsx.earthlore.client;
 
 import com.xxsx.earthlore.core.Gate;
 import com.xxsx.earthlore.data.Discipline;
+import com.xxsx.earthlore.data.ItemReq;
+import com.xxsx.earthlore.data.ResearchCost;
 import com.xxsx.earthlore.data.UnlockRef;
 import com.xxsx.earthlore.graph.LoreGraph;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -16,10 +19,12 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 
 /** Hover text of a knowledge node in the lore tree and the research table list (10 册 A-018). */
 final class NodeTooltip {
-    private static final int WIDTH = 220;
+    private static final int WIDTH = 232;
     private static final int MAX_UNLOCKS = 5;
 
     enum State {
@@ -72,6 +77,9 @@ final class NodeTooltip {
         if (I18n.exists(node.descKey())) {
             out.add(Component.translatable(node.descKey()).withStyle(ChatFormatting.DARK_AQUA));
         }
+        if (node.gate() != Gate.ROOT && state != State.SELF) {
+            requirements(node, out);
+        }
         unlocks(node, out);
         teachers(node, out);
         if (node.gate() == Gate.ROOT) {
@@ -79,11 +87,51 @@ final class NodeTooltip {
         } else if (state == State.AVAILABLE) {
             out.add(Component.translatable("screen.earth_lore.tree.how").withStyle(ChatFormatting.DARK_GRAY));
         }
+        Minecraft mc = Minecraft.getInstance();
+        int wrapWidth = mc != null && mc.getWindow() != null
+                ? Math.min(WIDTH, Math.max(136, mc.getWindow().getGuiScaledWidth() - 36))
+                : WIDTH;
         List<FormattedCharSequence> lines = new ArrayList<>();
         for (Component line : out) {
-            lines.addAll(font.split(line, WIDTH));
+            lines.addAll(font.split(line, wrapWidth));
         }
         return lines;
+    }
+
+    private static void requirements(LoreGraph.Node node, List<Component> out) {
+        ResearchCost cost = node.data().research();
+        if (!cost.items().isEmpty()) {
+            MutableComponent mats = Component.translatable("screen.earth_lore.tree.cost");
+            for (int i = 0; i < cost.items().size(); i++) {
+                if (i > 0) {
+                    mats.append(Component.translatable("screen.earth_lore.tree.separator"));
+                }
+                ResearchCost.Material m = cost.items().get(i);
+                mats.append(ResearchTableScreen.ingredientName(m.ingredient()))
+                        .append(Component.literal(" x" + m.count()));
+            }
+            out.add(mats.withStyle(ChatFormatting.GRAY));
+        }
+        List<Component> reqParts = new ArrayList<>();
+        for (ItemReq req : node.data().itemRequires()) {
+            req.hold().ifPresent(hold -> reqParts.add(
+                    Component.translatable("screen.earth_lore.research_table.check.hold", ResearchTableScreen.ingredientName(hold))));
+            req.made().ifPresent(made -> BuiltInRegistries.ITEM.getOptional(made)
+                    .filter(item -> item != Items.AIR)
+                    .ifPresent(item -> reqParts.add(
+                            Component.translatable("screen.earth_lore.research_table.check.made", new ItemStack(item).getHoverName()))));
+            req.cond().ifPresent(cond -> reqParts.add(ResearchTableScreen.conditionLabel(cond)));
+        }
+        if (!reqParts.isEmpty()) {
+            MutableComponent condLine = Component.translatable("screen.earth_lore.tree.conditions");
+            for (int i = 0; i < reqParts.size(); i++) {
+                if (i > 0) {
+                    condLine.append(Component.translatable("screen.earth_lore.tree.separator"));
+                }
+                condLine.append(reqParts.get(i));
+            }
+            out.add(condLine.withStyle(ChatFormatting.GRAY));
+        }
     }
 
     static MutableComponent join(LoreGraph graph, List<Identifier> ids) {
@@ -105,11 +153,20 @@ final class NodeTooltip {
             Identifier id = Identifier.tryParse(unlock.value());
             Optional<Component> name = switch (unlock.kind()) {
                 case ITEM, READOUT -> id == null ? Optional.empty()
-                        : BuiltInRegistries.ITEM.getOptional(id).map(item -> new ItemStack(item).getHoverName());
+                        : BuiltInRegistries.ITEM.getOptional(id)
+                        .filter(item -> item != Items.AIR)
+                        .map(item -> new ItemStack(item).getHoverName());
                 case BLOCK, YIELD -> id == null ? Optional.empty()
-                        : BuiltInRegistries.BLOCK.getOptional(id).map(block -> (Component) block.getName());
+                        : BuiltInRegistries.BLOCK.getOptional(id)
+                        .filter(block -> block != Blocks.AIR)
+                        .map(block -> (Component) block.getName());
                 default -> Optional.empty();
             };
+            if (name.isEmpty() && id != null
+                    && (unlock.kind() == UnlockRef.Kind.ITEM || unlock.kind() == UnlockRef.Kind.READOUT
+                    || unlock.kind() == UnlockRef.Kind.BLOCK || unlock.kind() == UnlockRef.Kind.YIELD)) {
+                continue;
+            }
             if (name.isPresent() && names.size() < MAX_UNLOCKS) {
                 names.add(name.get());
             } else {

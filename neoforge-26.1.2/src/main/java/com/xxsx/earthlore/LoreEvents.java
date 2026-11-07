@@ -20,7 +20,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.villager.AbstractVillager;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.bus.api.IEventBus;
@@ -32,6 +34,7 @@ import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.entity.player.TradeWithVillagerEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -87,9 +90,29 @@ final class LoreEvents {
         bus.addListener(PlayerInteractEvent.RightClickItem.class, LoreEvents::rightClickItem);
         bus.addListener(PlayerInteractEvent.RightClickBlock.class, LoreEvents::rightClickBlock);
         bus.addListener(PlayerInteractEvent.EntityInteract.class, event -> {
+            ItemStack held = event.getItemStack();
+            if (event.getTarget() instanceof LivingEntity living && held.has(LoreContent.LORE_TEXT.get())
+                    && (living instanceof Player || event.getEntity().isShiftKeyDown())) {
+                InteractionResult result = TeachingService.interactTeach(event.getEntity(), living, held, event.getHand());
+                if (result.consumesAction()) {
+                    event.setCanceled(true);
+                    event.setCancellationResult(InteractionResult.SUCCESS);
+                    return;
+                }
+            }
             if (!event.getLevel().isClientSide() && KnowledgeService.running()
                     && event.getTarget() instanceof AbstractVillager villager) {
                 TeachingService.lockUnloaded(villager.getOffers());
+                if (event.getEntity() instanceof ServerPlayer serverPlayer
+                        && TeachingService.hasTeachingOffers(villager.getOffers())) {
+                    TeachingService.playVillagerTeachingFeedback(serverPlayer, villager);
+                }
+            }
+        });
+        bus.addListener(TradeWithVillagerEvent.class, event -> {
+            if (event.getEntity() instanceof ServerPlayer serverPlayer
+                    && event.getMerchantOffer().getResult().has(LoreContent.LORE_TEXT.get())) {
+                TeachingService.playVillagerTeachingFeedback(serverPlayer, event.getAbstractVillager());
             }
         });
         bus.addListener(BlockEvent.EntityPlaceEvent.class, event -> {
@@ -149,7 +172,7 @@ final class LoreEvents {
             if (held) {
                 event.getEntity().startUsingItem(hand);
             }
-            event.setCancellationResult(InteractionResult.CONSUME);
+            event.setCancellationResult(InteractionResult.SUCCESS);
             return;
         }
         double factor = CarrierFormRegistry.studyFactor(stack.getItem());
@@ -163,7 +186,7 @@ final class LoreEvents {
         if (held) {
             player.startUsingItem(hand);
         }
-        event.setCancellationResult(InteractionResult.CONSUME);
+        event.setCancellationResult(InteractionResult.SUCCESS);
     }
 
     /** A-013 rule 4: sneaking with both hands empty claims a machine that records an owner. */

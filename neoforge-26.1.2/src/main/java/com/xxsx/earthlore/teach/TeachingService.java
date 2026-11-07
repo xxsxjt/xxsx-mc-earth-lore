@@ -2,6 +2,7 @@ package com.xxsx.earthlore.teach;
 
 import com.xxsx.earthlore.EarthLore;
 import com.xxsx.earthlore.LoreConfig;
+import com.xxsx.earthlore.api.LoreLearnedEvent;
 import com.xxsx.earthlore.data.LoreText;
 import com.xxsx.earthlore.graph.GraphBuilder;
 import com.xxsx.earthlore.graph.LoreGraph;
@@ -14,10 +15,23 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.Holder;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.npc.villager.AbstractVillager;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.trading.ItemCost;
 import net.minecraft.world.item.trading.MerchantOffer;
@@ -128,6 +142,82 @@ public final class TeachingService {
                 offer.setToOutOfStock();
             }
         }
+    }
+
+    public static boolean hasTeachingOffers(MerchantOffers offers) {
+        for (MerchantOffer offer : offers) {
+            if (!offer.isOutOfStock() && offer.getResult().has(LoreContent.LORE_TEXT.get())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Plays librarian / page-turn audio and spawns knowledge glyph particles when a villager teaches or trades literature. */
+    public static void playVillagerTeachingFeedback(ServerPlayer player, AbstractVillager villager) {
+        if (!(player.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        player.swing(InteractionHand.MAIN_HAND, true);
+        serverLevel.playSound(null, villager.blockPosition(), SoundEvents.VILLAGER_WORK_LIBRARIAN, SoundSource.NEUTRAL, 0.7F, 1.0F);
+        serverLevel.playSound(null, player.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.05F);
+        serverLevel.sendParticles(ParticleTypes.ENCHANT,
+                villager.getX(), villager.getY() + 1.3, villager.getZ(),
+                10, 0.4, 0.35, 0.4, 0.15);
+        serverLevel.sendParticles(ParticleTypes.ENCHANT,
+                player.getX(), player.getY() + 1.2, player.getZ(),
+                8, 0.4, 0.35, 0.4, 0.15);
+    }
+
+    /**
+     * Direct teaching / lecturing interaction when holding a written literature item and interacting with
+     * another Player (or sneaking while interacting with a Villager/NPC). Triggers arm swing (InteractionResult.SUCCESS),
+     * librarian/book page-turn sounds, and knowledge glyph particles.
+     */
+    public static InteractionResult interactTeach(Player teacher, LivingEntity target, ItemStack literature, InteractionHand hand) {
+        LoreText text = literature.get(LoreContent.LORE_TEXT.get());
+        if (text == null || text.nodes().isEmpty()) {
+            return InteractionResult.PASS;
+        }
+        if (!(target instanceof Player) && !teacher.isShiftKeyDown()) {
+            return InteractionResult.PASS;
+        }
+        if (teacher.level().isClientSide()) {
+            return InteractionResult.SUCCESS;
+        }
+        if (!(teacher instanceof ServerPlayer serverTeacher) || !(teacher.level() instanceof ServerLevel serverLevel)) {
+            return InteractionResult.SUCCESS;
+        }
+        serverTeacher.swing(hand, true);
+        serverLevel.playSound(null, serverTeacher.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.75F, 1.0F);
+        serverLevel.playSound(null, target.blockPosition(), SoundEvents.VILLAGER_WORK_LIBRARIAN, SoundSource.PLAYERS, 0.65F, 1.05F);
+        serverLevel.sendParticles(ParticleTypes.ENCHANT,
+                serverTeacher.getX(), serverTeacher.getY() + 1.25, serverTeacher.getZ(),
+                8, 0.4, 0.35, 0.4, 0.15);
+        serverLevel.sendParticles(ParticleTypes.ENCHANT,
+                target.getX(), target.getY() + target.getBbHeight() * 0.7, target.getZ(),
+                12, 0.45, 0.35, 0.45, 0.18);
+
+        if (target instanceof ServerPlayer student && KnowledgeService.running() && LoreConfig.allowTeaching()) {
+            LoreGraph graph = KnowledgeService.graph();
+            for (Identifier id : text.nodes()) {
+                Optional<LoreGraph.Node> nodeOpt = graph.node(id);
+                if (nodeOpt.isEmpty() || !KnowledgeService.knows(serverTeacher.getUUID(), id)
+                        || KnowledgeService.knowsSelf(student, id)) {
+                    continue;
+                }
+                LoreGraph.Node node = nodeOpt.get();
+                if (KnowledgeService.prerequisitesMet(student.getUUID(), node, null)
+                        && KnowledgeService.learn(student, id, LoreLearnedEvent.Source.STUDY, literature)) {
+                    Component name = Component.translatable(node.nameKey());
+                    student.sendSystemMessage(Component.translatable("message.earth_lore.learned", name));
+                    serverTeacher.sendOverlayMessage(Component.translatable("message.earth_lore.taught", student.getDisplayName(), name));
+                    serverLevel.playSound(null, student.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.4F, 1.4F);
+                    break;
+                }
+            }
+        }
+        return InteractionResult.SUCCESS;
     }
 
     private static void warn(String message) {

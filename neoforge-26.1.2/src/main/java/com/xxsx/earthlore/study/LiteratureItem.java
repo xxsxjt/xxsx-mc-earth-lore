@@ -6,6 +6,7 @@ import com.xxsx.earthlore.data.KnowledgeNode;
 import com.xxsx.earthlore.data.LoreText;
 import com.xxsx.earthlore.registry.LoreContent;
 import com.xxsx.earthlore.registry.LoreRegistries;
+import com.xxsx.earthlore.teach.TeachingService;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -101,7 +102,18 @@ public class LiteratureItem extends Item {
             return InteractionResult.FAIL;
         }
         player.startUsingItem(hand);
-        return InteractionResult.CONSUME;
+        return InteractionResult.SUCCESS;
+    }
+
+    @Override
+    public InteractionResult interactLivingEntity(ItemStack stack, Player player, LivingEntity target, InteractionHand hand) {
+        if (stack.has(LoreContent.LORE_TEXT.get()) && (target instanceof Player || player.isShiftKeyDown())) {
+            InteractionResult result = TeachingService.interactTeach(player, target, stack, hand);
+            if (result.consumesAction()) {
+                return InteractionResult.SUCCESS;
+            }
+        }
+        return super.interactLivingEntity(stack, player, target, hand);
     }
 
     @Override

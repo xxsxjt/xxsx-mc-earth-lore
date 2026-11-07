@@ -3,6 +3,7 @@ package com.xxsx.earthlore.client;
 import com.xxsx.earthlore.core.Prereq;
 import com.xxsx.earthlore.data.Discipline;
 import com.xxsx.earthlore.graph.LoreGraph;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -14,13 +15,19 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import org.lwjgl.glfw.GLFW;
@@ -40,14 +47,28 @@ public class LoreTreeScreen extends Screen {
     private static final int TOP = 40;
     private static final int SIDE = 8;
     private static final int FOOTER = 16;
-    private static final int COL_W = 112;
-    private static final int NODE_W = 96;
-    private static final int NODE_H = 18;
-    private static final int ROW_H = 24;
-    private static final int TITLE_H = 14;
+    private static final int COL_W = 122;
+    private static final int NODE_W = 102;
+    private static final int NODE_H = 20;
+    private static final int ROW_H = 26;
+    private static final int TITLE_H = 16;
     private static final int PAD = 8;
     private static final int BODY_FILL = 0xD0101418;
     private static final int FRAME = 0xFF3A3F46;
+
+    /**
+     * Priority order for core open branches:
+     * 基础通识 (che/eng/agr) -> 地质冶金 (geo/mat) -> 传统医药 (med) -> 锻体武学 (som) -> 玄门修真 (xua) -> 奥术魔法 (mag) -> 神学祝祷 (the).
+     */
+    private static final List<String> CORE_BRANCH_PRIORITY = List.of(
+            "che", "eng", "agr",
+            "geo", "mat",
+            "med",
+            "som",
+            "xua",
+            "mag",
+            "the"
+    );
 
     private static Identifier lastDiscipline;
 
@@ -57,6 +78,8 @@ public class LoreTreeScreen extends Screen {
     private record Edge(Placed from, Placed to, boolean any) {
     }
 
+    private final Screen parent;
+    private Button hubButton;
     private List<Identifier> tabs = List.of();
     private Identifier current;
     private List<Placed> placed = List.of();
@@ -72,30 +95,117 @@ public class LoreTreeScreen extends Screen {
     private Identifier cachedDiscipline;
 
     public LoreTreeScreen() {
-        super(Component.translatable(KEY + "title"));
+        this(null, null);
     }
 
     public LoreTreeScreen(Identifier initialDiscipline) {
-        this();
-        this.current = initialDiscipline;
-        lastDiscipline = initialDiscipline;
+        this(null, initialDiscipline);
+    }
+
+    public LoreTreeScreen(Screen parent, Identifier initialDiscipline) {
+        super(Component.translatable(KEY + "title"));
+        this.parent = parent;
+        if (initialDiscipline != null) {
+            this.current = initialDiscipline;
+            lastDiscipline = initialDiscipline;
+        }
     }
 
     @Override
     protected void init() {
+        hubButton = null;
+        if (canOpenCultivationHub()) {
+            Component btnLabel = Component.translatable(KEY + "back_to_hub");
+            int btnW = Math.min(Math.max(76, font.width(btnLabel) + 12), Math.max(76, width / 3));
+            hubButton = addRenderableWidget(Button.builder(btnLabel, b -> openCultivationHub())
+                    .bounds(width - SIDE - btnW, TAB_Y, btnW, TAB)
+                    .tooltip(Tooltip.create(Component.translatable(KEY + "back_to_hub.tip")))
+                    .build());
+        }
         LoreGraph graph = ClientKnowledge.graph();
         tabs = visibleDisciplines(graph);
-        if (current == null || !tabs.contains(current)) {
-            current = lastDiscipline != null && tabs.contains(lastDiscipline) ? lastDiscipline : firstWithNodes(graph);
+        if (current == null || !tabs.contains(current) || (!isDisciplineOpen(graph, current) && firstWithNodes(graph) != null)) {
+            current = lastDiscipline != null && tabs.contains(lastDiscipline) && isDisciplineOpen(graph, lastDiscipline)
+                    ? lastDiscipline
+                    : firstWithNodes(graph);
         }
         rebuild();
     }
 
+    private boolean canOpenCultivationHub() {
+        return parent != null || ModList.get().isLoaded("earth_human");
+    }
+
+    private void openCultivationHub() {
+        playPageSound(1.05F);
+        if (parent != null) {
+            minecraft.setScreen(parent);
+            return;
+        }
+        try {
+            Class<?> hubClass = Class.forName("com.xxsx.earthhuman.client.CultivationHubScreen");
+            Constructor<?> ctor = hubClass.getConstructor(Screen.class);
+            Screen hub = (Screen) ctor.newInstance(this);
+            minecraft.setScreen(hub);
+        } catch (ReflectiveOperationException ignored) {
+            onClose();
+        }
+    }
+
+    private void playPageSound(float pitch) {
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, pitch, 0.75F));
+        }
+    }
+
+    /**
+     * True when the discipline has loaded nodes or its home/base mod is currently installed.
+     * Isolated addon disciplines (earth_life_sciences / earth_physical_sciences without base_mod nodes) return false.
+     */
+    public static boolean isDisciplineOpen(LoreGraph graph, Identifier id) {
+        if (!graph.inDiscipline(id).isEmpty()) {
+            return true;
+        }
+        return graph.discipline(id)
+                .map(d -> ModList.get().isLoaded(d.homeMod())
+                        || (!d.baseMod().isEmpty() && ModList.get().isLoaded(d.baseMod())))
+                .orElse(false);
+    }
+
+    private static boolean isHomeModLoaded(LoreGraph graph, Identifier id) {
+        return graph.discipline(id).map(d -> ModList.get().isLoaded(d.homeMod())).orElse(true);
+    }
+
+    private static int corePriorityIndex(Identifier id) {
+        int idx = CORE_BRANCH_PRIORITY.indexOf(id.getPath());
+        return idx >= 0 ? idx : 50;
+    }
+
+    /** Core branch category key for UI badges and tooltips. */
+    private static Optional<String> coreBranchCategoryKey(Identifier id) {
+        return switch (id.getPath()) {
+            case "che", "eng", "agr" -> Optional.of(KEY + "branch.general");
+            case "geo", "mat" -> Optional.of(KEY + "branch.geo_metal");
+            case "med" -> Optional.of(KEY + "branch.medicine");
+            case "som" -> Optional.of(KEY + "branch.somatics");
+            case "xua" -> Optional.of(KEY + "branch.xuanhuan");
+            case "mag" -> Optional.of(KEY + "branch.magic");
+            case "the" -> Optional.of(KEY + "branch.theology");
+            default -> Optional.empty();
+        };
+    }
+
+    /**
+     * Orders active core branches first (prioritizing the 7 open core branch families),
+     * followed by isolated/unloaded addon disciplines shown greyed-out with "对应学科扩展未装载".
+     */
     private static List<Identifier> visibleDisciplines(LoreGraph graph) {
-        return graph.disciplineOrder().stream()
-                .filter(id -> !graph.inDiscipline(id).isEmpty()
-                        || graph.discipline(id).map(d -> ModList.get().isLoaded(d.homeMod())).orElse(false))
-                .toList();
+        List<Identifier> all = new ArrayList<>(graph.disciplineOrder());
+        all.sort(Comparator
+                .comparing((Identifier id) -> !isDisciplineOpen(graph, id))
+                .thenComparingInt(LoreTreeScreen::corePriorityIndex)
+                .thenComparingInt(id -> graph.discipline(id).map(Discipline::order).orElse(99)));
+        return List.copyOf(all);
     }
 
     private Identifier firstWithNodes(LoreGraph graph) {
@@ -234,9 +344,12 @@ public class LoreTreeScreen extends Screen {
             return;
         }
         current = discipline;
-        lastDiscipline = discipline;
+        if (isDisciplineOpen(ClientKnowledge.graph(), discipline)) {
+            lastDiscipline = discipline;
+        }
         scrollX = 0;
         scrollY = 0;
+        playPageSound(1.0F);
         rebuild();
     }
 
@@ -254,8 +367,11 @@ public class LoreTreeScreen extends Screen {
         if (tabs.isEmpty()) {
             return;
         }
-        int at = Math.max(0, tabs.indexOf(current));
-        select(tabs.get(Math.floorMod(at + step, tabs.size())));
+        LoreGraph graph = ClientKnowledge.graph();
+        List<Identifier> openTabs = tabs.stream().filter(id -> isDisciplineOpen(graph, id)).toList();
+        List<Identifier> pool = openTabs.isEmpty() ? tabs : openTabs;
+        int at = Math.max(0, pool.indexOf(current));
+        select(pool.get(Math.floorMod(at + step, pool.size())));
     }
 
     // ---- drawing ----
@@ -281,22 +397,24 @@ public class LoreTreeScreen extends Screen {
         for (int c = 0; c < columnTiers.size(); c++) {
             g.text(font, Component.translatable(KEY + "tier", columnTiers.get(c)), ox + PAD + c * COL_W, oy + 3, 0xFF9AA0A6, false);
         }
-        for (Edge edge : edges) {
-            drawEdge(g, graph, edge, ox, oy);
-        }
         boolean inBody = LoreGui.inside(mouseX, mouseY, x0, y0, x1 - x0, y1 - y0);
         for (Placed p : placed) {
             boolean hover = inBody && LoreGui.inside(mouseX, mouseY, ox + p.x(), oy + p.y(), NODE_W, NODE_H);
             if (hover) {
                 hovered = p;
             }
+        }
+        for (Edge edge : edges) {
+            boolean activeEdge = hovered != null && (hovered.equals(edge.from()) || hovered.equals(edge.to()));
+            drawEdge(g, graph, edge, ox, oy, activeEdge);
+        }
+        for (Placed p : placed) {
+            boolean hover = hovered == p;
             drawNode(g, graph, p, ox + p.x(), oy + p.y(), hover);
         }
         g.disableScissor();
         if (placed.isEmpty()) {
-            Component message = current == null ? Component.translatable(KEY + "empty")
-                    : Component.translatable(KEY + "empty_discipline", ClientTooltips.disciplineName(graph, current));
-            g.centeredText(font, message, width / 2, y0 + bodyH() / 2 - 4, 0xFFB0B0B0);
+            drawEmptyState(g, graph, x0, y0, bodyW(), bodyH());
         }
         drawFooter(g);
         super.extractRenderState(g, mouseX, mouseY, delta);
@@ -306,17 +424,58 @@ public class LoreTreeScreen extends Screen {
             Identifier id = tabs.get(hoveredTab);
             List<Component> lines = new ArrayList<>();
             lines.add(ClientTooltips.disciplineName(graph, id));
+            coreBranchCategoryKey(id).ifPresent(catKey ->
+                    lines.add(Component.translatable(catKey).withStyle(ChatFormatting.GOLD)));
+            boolean open = isDisciplineOpen(graph, id);
+            boolean homeLoaded = isHomeModLoaded(graph, id);
             lines.add(counts(graph, id));
-            graph.discipline(id).ifPresent(d -> lines.add(Component.translatable(KEY + "home", d.homeMod()).withColor(0xFF808080)));
+            if (!open) {
+                lines.add(Component.translatable(KEY + "addon_unloaded").withStyle(ChatFormatting.RED));
+                graph.discipline(id).ifPresent(d ->
+                        lines.add(Component.translatable(KEY + "home_unloaded", d.homeMod()).withStyle(ChatFormatting.DARK_GRAY)));
+            } else if (!homeLoaded) {
+                graph.discipline(id).ifPresent(d ->
+                        lines.add(Component.translatable(KEY + "partial_addon", d.homeMod()).withStyle(ChatFormatting.YELLOW)));
+            } else {
+                graph.discipline(id).ifPresent(d ->
+                        lines.add(Component.translatable(KEY + "home", d.homeMod()).withColor(0xFF808080)));
+            }
             g.setComponentTooltipForNextFrame(font, lines, mouseX, mouseY);
         }
+    }
+
+    private void drawEmptyState(GuiGraphicsExtractor g, LoreGraph graph, int x0, int y0, int w, int h) {
+        int cx = x0 + w / 2;
+        int cy = y0 + h / 2;
+        int maxTextW = Math.max(60, w - 24);
+        if (current == null) {
+            g.centeredText(font, LoreGui.fit(font, Component.translatable(KEY + "empty"), maxTextW), cx, cy - 4, 0xFFB0B0B0);
+            return;
+        }
+        boolean open = isDisciplineOpen(graph, current);
+        Component titleLine = Component.translatable(KEY + "empty_discipline", ClientTooltips.disciplineName(graph, current));
+        g.centeredText(font, LoreGui.fit(font, titleLine, maxTextW), cx, cy - 18, 0xFFD0D4D8);
+        if (!open) {
+            String modId = graph.discipline(current).map(Discipline::homeMod).orElse("unknown");
+            Component badge = Component.translatable(KEY + "addon_unloaded");
+            g.centeredText(font, LoreGui.fit(font, badge, maxTextW), cx, cy - 4, 0xFFE57368);
+            Component detail = Component.translatable(KEY + "addon_unloaded_detail", modId);
+            g.centeredText(font, LoreGui.fit(font, detail, maxTextW), cx, cy + 10, 0xFF9AA0A6);
+            Component coreBranches = Component.translatable(KEY + "core_branches_hint");
+            g.centeredText(font, LoreGui.fit(font, coreBranches, maxTextW), cx, cy + 24, 0xFFD4B254);
+        }
+    }
+
+    private int tabsAvailableWidth() {
+        int reservedRight = hubButton != null && hubButton.visible ? hubButton.getWidth() + 8 : 0;
+        return Math.max(48, width - SIDE * 2 - reservedRight);
     }
 
     private int tabStep() {
         if (tabs.isEmpty()) {
             return TAB + 2;
         }
-        return Math.max(12, Math.min(TAB + 2, (width - SIDE * 2) / tabs.size()));
+        return Math.max(12, Math.min(TAB + 2, tabsAvailableWidth() / tabs.size()));
     }
 
     /** @return the hovered tab, or -1 */
@@ -328,35 +487,60 @@ public class LoreTreeScreen extends Screen {
             Identifier id = tabs.get(i);
             Optional<Discipline> discipline = graph.discipline(id);
             int rgb = discipline.map(Discipline::color).orElse(0x808080);
+            boolean open = isDisciplineOpen(graph, id);
             int x = SIDE + i * step;
             boolean selected = id.equals(current);
             boolean hover = LoreGui.inside(mouseX, mouseY, x, TAB_Y, size, size);
             if (hover) {
                 hovered = i;
             }
-            g.fill(x, TAB_Y, x + size, TAB_Y + size, selected ? LoreColors.argb(LoreColors.shade(rgb)) : 0xC0202428);
-            g.outline(x, TAB_Y, size, size, selected || hover ? 0xFFFFFFFF : FRAME);
-            g.fill(x + 1, TAB_Y + size - 3, x + size - 1, TAB_Y + size - 1, LoreColors.argb(discipline.map(LoreColors::onDark).orElse(rgb)));
+            int bg = !open ? 0xB014171A : (selected ? LoreColors.argb(LoreColors.shade(rgb)) : 0xC0202428);
+            g.fill(x, TAB_Y, x + size, TAB_Y + size, bg);
+            int outlineColor = selected ? 0xFFFFFFFF : (hover ? 0xFFD4B254 : (open ? FRAME : 0xFF282C30));
+            g.outline(x, TAB_Y, size, size, outlineColor);
+            int barColor = open ? LoreColors.argb(discipline.map(LoreColors::onDark).orElse(rgb)) : 0xFF4A4E54;
+            g.fill(x + 1, TAB_Y + size - 3, x + size - 1, TAB_Y + size - 1, barColor);
             discipline.flatMap(d -> BuiltInRegistries.ITEM.getOptional(d.icon())).ifPresent(item -> {
                 if (size >= 18) {
                     g.item(new ItemStack(item), x + (size - 16) / 2, TAB_Y + 1);
                 }
             });
-            if (graph.inDiscipline(id).isEmpty()) {
-                g.fill(x + 1, TAB_Y + 1, x + size - 1, TAB_Y + size - 1, 0x90000000);
+            if (!open || graph.inDiscipline(id).isEmpty()) {
+                g.fill(x + 1, TAB_Y + 1, x + size - 1, TAB_Y + size - 1, 0xA80C0E10);
+                if (size >= 14) {
+                    LoreGui.lock(g, x + size - 8, TAB_Y + 2, 0xFF8A8E94);
+                }
             }
         }
         return hovered;
     }
 
     private void drawHeader(GuiGraphicsExtractor g, LoreGraph graph) {
+        int maxW = Math.max(40, width - SIDE * 2);
         if (current == null) {
-            g.text(font, title, SIDE, HEADER_Y, 0xFFFFFFFF, true);
+            g.text(font, LoreGui.fit(font, title, maxW), SIDE, HEADER_Y, 0xFFFFFFFF, true);
             return;
         }
-        Component name = ClientTooltips.disciplineName(graph, current);
-        g.text(font, name, SIDE, HEADER_Y, 0xFFFFFFFF, true);
-        g.text(font, counts(graph, current), SIDE + font.width(name) + 8, HEADER_Y, 0xFFB0B0B0, true);
+        MutableComponent headerLine = Component.empty().append(ClientTooltips.disciplineName(graph, current));
+        coreBranchCategoryKey(current).ifPresent(catKey ->
+                headerLine.append(Component.literal(" · ").withColor(0xFF80868C))
+                        .append(Component.translatable(catKey).withColor(0xFFD4B254)));
+        Component fittedName = LoreGui.fit(font, headerLine, maxW / 2);
+        g.text(font, fittedName, SIDE, HEADER_Y, 0xFFFFFFFF, true);
+        int nextX = SIDE + font.width(fittedName) + 8;
+        int remaining = width - SIDE - nextX;
+        if (remaining > 24) {
+            MutableComponent statusPart = Component.empty().append(counts(graph, current));
+            if (!isDisciplineOpen(graph, current)) {
+                statusPart.append(Component.literal(" | ").withColor(0xFF606468))
+                        .append(Component.translatable(KEY + "addon_unloaded").withColor(0xFFE57368));
+            } else if (!isHomeModLoaded(graph, current)) {
+                graph.discipline(current).ifPresent(d ->
+                        statusPart.append(Component.literal(" | ").withColor(0xFF606468))
+                                .append(Component.translatable(KEY + "partial_addon", d.homeMod()).withColor(0xFFD4B254)));
+            }
+            g.text(font, LoreGui.fit(font, statusPart, remaining), nextX, HEADER_Y, 0xFFB0B0B0, true);
+        }
     }
 
     private static Component counts(LoreGraph graph, Identifier discipline) {
@@ -374,7 +558,7 @@ public class LoreTreeScreen extends Screen {
                 : Component.translatable(KEY + "count", self, nodes.size());
     }
 
-    private void drawEdge(GuiGraphicsExtractor g, LoreGraph graph, Edge edge, int ox, int oy) {
+    private void drawEdge(GuiGraphicsExtractor g, LoreGraph graph, Edge edge, int ox, int oy, boolean highlighted) {
         Placed from = edge.from();
         Placed to = edge.to();
         int ax = ox + from.x() + NODE_W;
@@ -382,8 +566,8 @@ public class LoreTreeScreen extends Screen {
         int bx = ox + to.x();
         int by = oy + to.y() + NODE_H / 2;
         int rgb = graph.discipline(from.node().discipline()).map(LoreColors::onDark).orElse(0x808080);
-        int alpha = ClientKnowledge.knows(from.node().id()) ? 0xFF000000 : 0x80000000;
-        int color = alpha | (rgb & 0xFFFFFF);
+        int alpha = highlighted || ClientKnowledge.knows(from.node().id()) ? 0xFF000000 : 0x98000000;
+        int color = highlighted ? 0xFFFFFFFF : (alpha | (rgb & 0xFFFFFF));
         int mid = bx - (COL_W - NODE_W) / 2;
         if (mid <= ax) {
             mid = (ax + bx) / 2;
@@ -411,6 +595,7 @@ public class LoreTreeScreen extends Screen {
             case AVAILABLE -> 0xFFFFFFFF;
             case MISSING -> LoreGui.MISSING_FILL;
         };
+        g.fill(x + 1, y + 1, x + NODE_W + 1, y + NODE_H + 1, 0x55000000);
         g.fill(x, y, x + NODE_W, y + NODE_H, fill);
         LoreGui.outline(g, x, y, NODE_W, NODE_H, hover ? 0xFFFFFFFF : border, p.visitor());
         if (!p.visitor()) {
@@ -422,34 +607,47 @@ public class LoreTreeScreen extends Screen {
             g.fill(mx, y + 3, mx + 5, y + 8, 0xFFFFFFFF);
             g.fill(mx + 1, y + 4, mx + 4, y + 7, LoreColors.argb(LoreColors.shade(rgb)));
             textRoom -= 7;
+        } else if (state == NodeTooltip.State.MISSING && !p.visitor()) {
+            LoreGui.lock(g, x + NODE_W - 10, y + (NODE_H - 9) / 2, 0xFFCCCCCC);
+            textRoom -= 10;
         }
         Component label = NodeTooltip.name(p.node());
         if (p.visitor()) {
             label = Component.literal("[" + discipline.map(Discipline::code).orElse("?") + "] ").append(label);
         }
-        g.text(font, LoreGui.fit(font, label, textRoom), x + 4, y + 5, LoreColors.textOn(fill & 0xFFFFFF), false);
+        g.text(font, LoreGui.fit(font, label, textRoom), x + 4, y + (NODE_H - 8) / 2, LoreColors.textOn(fill & 0xFFFFFF), false);
     }
 
     private void drawFooter(GuiGraphicsExtractor g) {
         int y = height - FOOTER + 4;
         int x = SIDE;
+        int maxRight = width - SIDE;
         x = legend(g, x, y, 0xFF4FAF4F, false, Component.translatable(KEY + "legend.self"));
         x = legend(g, x, y, 0xFF4FAF4F, true, Component.translatable(KEY + "legend.team"));
         x = legend(g, x, y, 0xFFFFFFFF, false, Component.translatable(KEY + "legend.available"));
         x = legend(g, x, y, LoreGui.MISSING_FILL, false, Component.translatable(KEY + "legend.missing"));
-        LoreGui.dashedHorizontal(g, x, x + 12, y + 4, 0xFFB0B0B0);
-        x += 15;
         Component any = Component.translatable(KEY + "legend.any");
-        g.text(font, any, x, y, 0xFFB0B0B0, false);
-        x += font.width(any) + 10;
+        if (x + 15 + font.width(any) <= maxRight) {
+            LoreGui.dashedHorizontal(g, x, x + 12, y + 4, 0xFFB0B0B0);
+            x += 15;
+            g.text(font, any, x, y, 0xFFB0B0B0, false);
+            x += font.width(any) + 10;
+        }
         Component hint = Component.translatable(KEY + "hint");
-        int hintX = width - SIDE - font.width(hint);
+        int hintX = maxRight - font.width(hint);
         if (hintX > x) {
             g.text(font, hint, hintX, y, 0xFF808080, false);
+        } else if (maxRight - x > 36) {
+            Component fittedHint = LoreGui.fit(font, hint, maxRight - x);
+            g.text(font, fittedHint, maxRight - font.width(fittedHint), y, 0xFF808080, false);
         }
     }
 
     private int legend(GuiGraphicsExtractor g, int x, int y, int fill, boolean team, Component label) {
+        int itemW = 12 + font.width(label);
+        if (x + itemW > width - SIDE) {
+            return x;
+        }
         g.fill(x, y, x + 9, y + 9, 0xFFB0B0B0);
         g.fill(x + 1, y + 1, x + 8, y + 8, fill);
         if (team) {

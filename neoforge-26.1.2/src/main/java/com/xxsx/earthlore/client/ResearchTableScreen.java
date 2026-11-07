@@ -28,6 +28,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -35,6 +36,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
@@ -74,6 +76,7 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
     }
 
     private final Button[] modeButtons = new Button[MODES.length];
+    private Button treeButton;
     private Button startButton;
     private Button cancelButton;
     private int mode;
@@ -90,6 +93,10 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
     @Override
     protected void init() {
         super.init();
+        treeButton = addRenderableWidget(Button.builder(Component.translatable(KEY + "open_tree"), b -> openLoreTree())
+                .bounds(leftPos + 110, topPos + 3, 38, 13)
+                .tooltip(Tooltip.create(Component.translatable(KEY + "open_tree.hint")))
+                .build());
         for (int i = 0; i < MODES.length; i++) {
             int index = i;
             modeButtons[i] = addRenderableWidget(Button.builder(Component.translatable(KEY + "mode." + MODES[i]), b -> setMode(index))
@@ -105,6 +112,20 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
                 .build());
         refresh();
         syncButtons();
+    }
+
+    private void openLoreTree() {
+        playPageSound(1.05F);
+        Identifier initial = selected != null
+                ? ClientKnowledge.graph().node(selected).map(LoreGraph.Node::discipline).orElse(null)
+                : null;
+        minecraft.setScreen(new LoreTreeScreen(this, initial));
+    }
+
+    private void playPageSound(float pitch) {
+        if (minecraft != null) {
+            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, pitch, 0.75F));
+        }
     }
 
     @Override
@@ -127,6 +148,7 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
     private void setMode(int next) {
         mode = next;
         scroll = 0;
+        playPageSound(1.0F);
         syncButtons();
     }
 
@@ -139,17 +161,31 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
         for (int i = 0; i < modeButtons.length; i++) {
             modeButtons[i].active = idle && i != shown;
         }
-        startButton.active = idle && slot(ResearchTableBlockEntity.SLOT_OUTPUT).isEmpty()
-                && (mode != ResearchTableBlockEntity.MODE_RESEARCH || selected != null);
+        boolean outputEmpty = slot(ResearchTableBlockEntity.SLOT_OUTPUT).isEmpty();
+        boolean nodeReady = mode != ResearchTableBlockEntity.MODE_RESEARCH || selected != null;
+        startButton.active = idle && outputEmpty && nodeReady;
+        Component startTip;
+        if (!idle) {
+            startTip = Component.translatable(KEY + "start.hint.busy");
+        } else if (!outputEmpty) {
+            startTip = Component.translatable(KEY + "start.hint.output_full");
+        } else if (!nodeReady) {
+            startTip = Component.translatable(KEY + "start.hint.select");
+        } else {
+            startTip = Component.translatable(KEY + "start.hint.ready." + MODES[mode]);
+        }
+        startButton.setTooltip(Tooltip.create(startTip));
         cancelButton.active = busy();
     }
 
     private void start() {
+        playPageSound(1.1F);
         Optional<Identifier> target = mode == ResearchTableBlockEntity.MODE_RESEARCH ? Optional.ofNullable(selected) : Optional.empty();
         ClientPacketDistributor.sendToServer(new LorePayloads.ResearchStart(menu.pos(), mode, target));
     }
 
     private void cancel() {
+        playPageSound(0.85F);
         ClientPacketDistributor.sendToServer(new LorePayloads.ResearchCancel(menu.pos()));
     }
 
@@ -392,23 +428,46 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
     public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
         super.extractBackground(g, mouseX, mouseY, delta);
         LoreGui.panel(g, leftPos, topPos, imageWidth, imageHeight);
+        int shown = shownMode();
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot slot = menu.slots.get(i);
             if (i == ResearchTableBlockEntity.SLOT_OUTPUT) {
                 LoreGui.bigSlot(g, leftPos + slot.x - 5, topPos + slot.y - 5);
             } else {
                 LoreGui.slot(g, leftPos + slot.x - 1, topPos + slot.y - 1);
+                if (shown == ResearchTableBlockEntity.MODE_COPY
+                        && i >= ResearchTableBlockEntity.SLOT_MATERIAL_FIRST + 2
+                        && i < ResearchTableBlockEntity.SLOT_MATERIAL_FIRST + ResearchTableBlockEntity.MATERIAL_SLOTS
+                        && !slot.hasItem()) {
+                    g.fill(leftPos + slot.x, topPos + slot.y, leftPos + slot.x + 16, topPos + slot.y + 16, 0x452A1F16);
+                }
             }
         }
+        drawSlotBanner(g, shown);
         drawList(g, mouseX, mouseY);
         drawChecks(g);
         drawStatus(g);
         drawProgress(g);
     }
 
+    private void drawSlotBanner(GuiGraphicsExtractor g, int shown) {
+        int x = leftPos + 153;
+        int y = topPos + 22;
+        int maxW = 88;
+        Component topLine = Component.translatable(KEY + "guide." + MODES[shown]);
+        g.text(font, LoreGui.fit(font, topLine, maxW), x, y, LoreGui.INK, false);
+        Component subLine;
+        if (shown == ResearchTableBlockEntity.MODE_RESEARCH && selected != null) {
+            subLine = ClientKnowledge.graph().node(selected).map(NodeTooltip::name).orElse(Component.literal(selected.toString()));
+        } else {
+            subLine = Component.translatable(KEY + "guide.sub." + MODES[shown]);
+        }
+        g.text(font, LoreGui.fit(font, subLine, maxW), x, y + 9, LoreGui.INK_SOFT, false);
+    }
+
     @Override
     protected void extractLabels(GuiGraphicsExtractor g, int mouseX, int mouseY) {
-        g.text(font, LoreGui.fit(font, title, 138), titleLabelX, titleLabelY, LoreGui.INK, false);
+        g.text(font, LoreGui.fit(font, title, 98), titleLabelX, titleLabelY, LoreGui.INK, false);
     }
 
     private void drawList(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -481,6 +540,10 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
         if (state == ResearchTableBlockEntity.State.PAUSED && !menu.pauseReason().isEmpty()) {
             g.text(font, LoreGui.fit(font, Component.translatable("lore.earth_lore.fail." + menu.pauseReason()), STATUS_W), x, y + 10,
                     LoreGui.WARN, false);
+        } else if (state == ResearchTableBlockEntity.State.RUNNING && menu.total() > 0) {
+            int remainSec = Math.max(0, (menu.total() - menu.progress() + 19) / 20);
+            Component timeLine = Component.translatable(KEY + "state.remain", remainSec);
+            g.text(font, LoreGui.fit(font, timeLine, STATUS_W), x, y + 10, LoreGui.INK_SOFT, false);
         } else if (state == ResearchTableBlockEntity.State.IDLE && !menu.lastFail().isEmpty()) {
             g.text(font, LoreGui.fit(font, Component.translatable(KEY + "last_fail",
                     Component.translatable("lore.earth_lore.fail." + menu.lastFail())), STATUS_W), x, y + 10, LoreGui.BAD, false);
@@ -488,13 +551,20 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
     }
 
     private void drawProgress(GuiGraphicsExtractor g) {
+        int arrowX = leftPos + 205;
+        int arrowY = topPos + 61;
+        g.fill(arrowX, arrowY, arrowX + 9, arrowY + 2, LoreGui.PAPER_SHADE);
+        g.fill(arrowX + 7, arrowY - 2, arrowX + 8, arrowY + 4, LoreGui.PAPER_SHADE);
+        g.fill(arrowX + 8, arrowY - 1, arrowX + 9, arrowY + 3, LoreGui.PAPER_SHADE);
+
         int x = leftPos + BAR_X;
         int y = topPos + BAR_Y;
-        g.fill(x - 1, y - 1, x + BAR_W + 1, y + 5, LoreGui.WALNUT);
-        g.fill(x, y, x + BAR_W, y + 4, 0xFF2A1F16);
+        g.fill(x - 1, y - 1, x + BAR_W + 1, y + 6, LoreGui.WALNUT);
+        g.fill(x, y, x + BAR_W, y + 5, 0xFF2A1F16);
         ResearchTableBlockEntity.State state = menu.state();
         if (state == ResearchTableBlockEntity.State.DONE) {
-            g.fill(x, y, x + BAR_W, y + 4, LoreGui.BRASS);
+            g.fill(x, y, x + BAR_W, y + 5, LoreGui.BRASS);
+            g.fill(arrowX, arrowY, arrowX + 9, arrowY + 2, LoreGui.BRASS);
             return;
         }
         if (menu.total() <= 0 || state == ResearchTableBlockEntity.State.IDLE) {
@@ -505,7 +575,12 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
         int rgb = target == null ? 0xB5893B : graph.node(target)
                 .flatMap(node -> graph.discipline(node.discipline())).map(d -> LoreColors.highlight(d.color())).orElse(0xB5893B);
         int filled = BAR_W * Math.min(menu.progress(), menu.total()) / menu.total();
-        g.fill(x, y, x + filled, y + 4, state == ResearchTableBlockEntity.State.PAUSED ? LoreGui.WARN : LoreColors.argb(rgb));
+        int barColor = state == ResearchTableBlockEntity.State.PAUSED ? LoreGui.WARN : LoreColors.argb(rgb);
+        g.fill(x, y, x + filled, y + 5, barColor);
+        int arrowFilled = 9 * Math.min(menu.progress(), menu.total()) / menu.total();
+        if (arrowFilled > 0) {
+            g.fill(arrowX, arrowY, arrowX + arrowFilled, arrowY + 2, barColor);
+        }
     }
 
     @Override
@@ -531,13 +606,50 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
             }
             lines.add(Component.translatable(KEY + "checks.server").withStyle(ChatFormatting.DARK_GRAY));
             g.setComponentTooltipForNextFrame(font, lines, mouseX, mouseY);
+        } else if (LoreGui.inside(mouseX, mouseY, leftPos + BAR_X - 1, topPos + BAR_Y - 2, BAR_W + 2, 9) && menu.total() > 0) {
+            int percent = menu.progress() * 100 / Math.max(1, menu.total());
+            int remainSec = Math.max(0, (menu.total() - menu.progress() + 19) / 20);
+            List<Component> lines = new ArrayList<>();
+            lines.add(Component.translatable(KEY + "progress.tooltip", menu.progress(), menu.total(), percent, remainSec)
+                    .withStyle(ChatFormatting.GOLD));
+            g.setComponentTooltipForNextFrame(font, lines, mouseX, mouseY);
         } else if (hoveredSlot != null && !hoveredSlot.hasItem()) {
             int index = menu.slots.indexOf(hoveredSlot);
-            String hint = slotHint(index);
-            if (hint != null) {
-                g.setComponentTooltipForNextFrame(font, List.of(Component.translatable(hint)), mouseX, mouseY);
+            List<Component> slotTip = slotTooltip(index);
+            if (!slotTip.isEmpty()) {
+                g.setComponentTooltipForNextFrame(font, slotTip, mouseX, mouseY);
             }
         }
+    }
+
+    private List<Component> slotTooltip(int index) {
+        String hint = slotHint(index);
+        if (hint == null) {
+            return List.of();
+        }
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.translatable(hint).withStyle(ChatFormatting.GOLD));
+        if (shownMode() == ResearchTableBlockEntity.MODE_RESEARCH && selected != null) {
+            ClientKnowledge.graph().node(selected).ifPresent(node -> {
+                if (index >= ResearchTableBlockEntity.SLOT_MATERIAL_FIRST
+                        && index < ResearchTableBlockEntity.SLOT_MATERIAL_FIRST + ResearchTableBlockEntity.MATERIAL_SLOTS) {
+                    for (ResearchCost.Material m : node.data().research().items()) {
+                        lines.add(Component.literal(" • ")
+                                .append(ingredientName(m.ingredient()))
+                                .append(Component.literal(" x" + m.count()))
+                                .withStyle(ChatFormatting.GRAY));
+                    }
+                } else if (index >= ResearchTableBlockEntity.SLOT_INSTRUMENT_FIRST
+                        && index < ResearchTableBlockEntity.SLOT_INSTRUMENT_FIRST + ResearchTableBlockEntity.INSTRUMENT_SLOTS) {
+                    for (ItemReq req : node.data().itemRequires()) {
+                        req.hold().ifPresent(hold -> lines.add(Component.literal(" • ")
+                                .append(ingredientName(hold))
+                                .withStyle(ChatFormatting.GRAY)));
+                    }
+                }
+            });
+        }
+        return lines;
     }
 
     private String slotHint(int index) {
@@ -575,6 +687,7 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
                 if (index >= 0 && index < rows.size() && rows.get(index).selectable()) {
                     Identifier id = rows.get(index).id();
                     selected = id.equals(selected) ? null : id;
+                    playPageSound(1.0F);
                     syncButtons();
                     return true;
                 }

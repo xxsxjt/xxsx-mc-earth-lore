@@ -32,15 +32,18 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.Containers;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -250,7 +253,11 @@ public class ResearchTableBlockEntity extends BaseContainerBlockEntity implement
         stepTimer = 0;
         pauseReason = "";
         state = State.RUNNING;
+        player.swing(InteractionHand.MAIN_HAND, true);
         serverLevel.playSound(null, worldPosition, LoreSounds.RESEARCH_RUNNING.value(), SoundSource.BLOCKS, 0.6F, 1.0F);
+        serverLevel.playSound(null, worldPosition, SoundEvents.VILLAGER_WORK_LIBRARIAN, SoundSource.BLOCKS, 0.65F, 1.0F);
+        serverLevel.playSound(null, worldPosition, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.6F, 1.05F);
+        spawnTableParticles(serverLevel, 12);
         setChanged();
     }
 
@@ -488,6 +495,7 @@ public class ResearchTableBlockEntity extends BaseContainerBlockEntity implement
         }
         if (state == State.RUNNING && level.getGameTime() % LoreSounds.RUNNING_INTERVAL == 0) {
             level.playSound(null, worldPosition, LoreSounds.RESEARCH_RUNNING.value(), SoundSource.BLOCKS, 0.5F, 1.0F);
+            level.playSound(null, worldPosition, SoundEvents.VILLAGER_WORK_LIBRARIAN, SoundSource.BLOCKS, 0.45F, 1.0F);
         }
         if (++stepTimer < STEP) {
             return;
@@ -510,6 +518,9 @@ public class ResearchTableBlockEntity extends BaseContainerBlockEntity implement
             }
         }
         progress = Math.min(total, progress + STEP);
+        level.playSound(null, worldPosition, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.35F,
+                0.95F + level.getRandom().nextFloat() * 0.1F);
+        spawnTableParticles(level, 6);
         if (progress >= total) {
             complete(level);
         }
@@ -528,6 +539,15 @@ public class ResearchTableBlockEntity extends BaseContainerBlockEntity implement
         }
         state = State.DONE;
         level.playSound(null, worldPosition, LoreSounds.RESEARCH_DONE.value(), SoundSource.BLOCKS, 0.8F, 1.0F);
+        level.playSound(null, worldPosition, SoundEvents.VILLAGER_WORK_LIBRARIAN, SoundSource.BLOCKS, 0.7F, 1.1F);
+        level.playSound(null, worldPosition, SoundEvents.BOOK_PAGE_TURN, SoundSource.BLOCKS, 0.7F, 1.0F);
+        spawnTableParticles(level, 20);
+    }
+
+    private void spawnTableParticles(ServerLevel level, int count) {
+        level.sendParticles(ParticleTypes.ENCHANT,
+                worldPosition.getX() + 0.5, worldPosition.getY() + 1.15, worldPosition.getZ() + 0.5,
+                count, 0.35, 0.25, 0.35, 0.15);
     }
 
     /** lore_research_cancel: returns every taken item to the table, dropping what does not fit. */

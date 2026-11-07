@@ -17,11 +17,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
@@ -121,6 +124,7 @@ public final class StudyService {
         if (current != null && current.polled && current.hand == hand
                 && ItemStack.isSameItemSameComponents(current.literature, literature)) {
             current.lastPoke = tickCount(player);
+            player.swing(hand, true);
             return StudyResult.ok(current.node, current.total);
         }
         return start(player, literature, factor, hand, true);
@@ -142,6 +146,9 @@ public final class StudyService {
         session.lastPoke = tickCount(player);
         SESSIONS.put(player.getUUID(), session);
         PacketDistributor.sendToPlayer(player, new LorePayloads.StudyState(Optional.of(session.node), session.total));
+        player.swing(hand, true);
+        player.level().playSound(null, player.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.0F);
+        spawnKnowledgeParticles(player, 8);
         return result;
     }
 
@@ -195,6 +202,9 @@ public final class StudyService {
         session.ticks++;
         if (session.ticks % 20 == 0) {
             player.level().playSound(null, player.blockPosition(), LoreSounds.STUDY.value(), SoundSource.PLAYERS, 0.6F, 1.0F);
+            player.level().playSound(null, player.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.5F,
+                    0.95F + player.getRandom().nextFloat() * 0.1F);
+            spawnKnowledgeParticles(player, 6);
         }
         if (session.ticks < session.total) {
             return;
@@ -205,6 +215,9 @@ public final class StudyService {
             Component name = node == null ? Component.literal(learned.toString()) : Component.translatable(node.nameKey());
             player.sendSystemMessage(Component.translatable("message.earth_lore.learned", name));
             player.level().playSound(null, player.blockPosition(), LoreSounds.LEARNED.value(), SoundSource.PLAYERS, 0.4F, 1.4F);
+            player.level().playSound(null, player.blockPosition(), SoundEvents.BOOK_PAGE_TURN, SoundSource.PLAYERS, 0.7F, 1.1F);
+            player.level().playSound(null, player.blockPosition(), SoundEvents.VILLAGER_WORK_LIBRARIAN, SoundSource.PLAYERS, 0.5F, 1.1F);
+            spawnKnowledgeParticles(player, 18);
         }
         LoreText text = session.literature.get(LoreContent.LORE_TEXT.get());
         StudyResult next = text == null || text.nodes().size() < 2 ? null : select(player, text, session.factor);
@@ -220,6 +233,14 @@ public final class StudyService {
             player.stopUsingItem();
         }
         PacketDistributor.sendToPlayer(player, new LorePayloads.StudyState(Optional.empty(), 0));
+    }
+
+    private static void spawnKnowledgeParticles(ServerPlayer player, int count) {
+        if (player.level() instanceof ServerLevel serverLevel) {
+            serverLevel.sendParticles(ParticleTypes.ENCHANT,
+                    player.getX(), player.getY() + 1.2, player.getZ(),
+                    count, 0.4, 0.35, 0.4, 0.15);
+        }
     }
 
     public static void cancel(ServerPlayer player) {
