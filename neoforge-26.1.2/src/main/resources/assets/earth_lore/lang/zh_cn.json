@@ -194,5 +194,6 @@
   "jei.earth_lore.needs": "需要知识：%s（%s）",
   "jei.earth_lore.locked": "已锁定（需先掌握对应学识）",
   "jei.earth_lore.unlocked": "已解锁",
-  "jei.earth_lore.soft_cap": "未学品质上限：%s"
+  "jei.earth_lore.soft_cap": "未学品质上限：%s",
+  "discipline.earth_lore.som": "锻体学"
 }

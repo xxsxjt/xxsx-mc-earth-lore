@@ -194,5 +194,6 @@
   "jei.earth_lore.needs": "Requires: %s (%s)",
   "jei.earth_lore.locked": "Locked (knowledge required)",
   "jei.earth_lore.unlocked": "Unlocked",
-  "jei.earth_lore.soft_cap": "Unlearned quality cap: %s"
+  "jei.earth_lore.soft_cap": "Unlearned quality cap: %s",
+  "discipline.earth_lore.som": "Somatics & Body Conditioning"
 }

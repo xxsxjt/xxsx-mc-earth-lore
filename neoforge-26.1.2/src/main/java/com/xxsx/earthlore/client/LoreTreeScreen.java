@@ -74,6 +74,12 @@ public class LoreTreeScreen extends Screen {
         super(Component.translatable(KEY + "title"));
     }
 
+    public LoreTreeScreen(Identifier initialDiscipline) {
+        this();
+        this.current = initialDiscipline;
+        lastDiscipline = initialDiscipline;
+    }
+
     @Override
     protected void init() {
         LoreGraph graph = ClientKnowledge.graph();
