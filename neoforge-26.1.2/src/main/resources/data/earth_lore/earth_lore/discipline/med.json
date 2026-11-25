@@ -4,6 +4,6 @@
   "color": "#D23C48",
   "icon": "minecraft:glistering_melon_slice",
   "home_mod": "earth_life_sciences",
-  "base_mod": "earth_on_minecraft",
+  "base_mod": "earth_core",
   "has_root": true
 }

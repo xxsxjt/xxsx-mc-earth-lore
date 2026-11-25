@@ -3,6 +3,6 @@
   "order": 4,
   "color": "#A6C23A",
   "icon": "minecraft:wheat",
-  "home_mod": "earth_on_minecraft",
+  "home_mod": "earth_core",
   "has_root": true
 }
