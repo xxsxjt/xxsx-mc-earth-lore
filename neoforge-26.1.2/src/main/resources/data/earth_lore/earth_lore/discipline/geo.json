@@ -3,6 +3,6 @@
   "order": 0,
   "color": "#8A5A32",
   "icon": "minecraft:iron_ore",
-  "home_mod": "earth_on_minecraft",
+  "home_mod": "earth_core",
   "has_root": true
 }

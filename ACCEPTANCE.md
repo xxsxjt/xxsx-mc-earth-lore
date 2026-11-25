@@ -27,7 +27,7 @@
 
 ## 3. A-023 GameTest 对照表（已编写源码并编译通过，待运行验证）
 
-全部测试位于 `com.xxsx.earthlore.gametest.LoreGameTests` 与 `FtbTeamTest`：
+全部测试位于 `com.xxsx.earth.lore.gametest.LoreGameTests` 与 `FtbTeamTest`：
 
 | GameTest 名称 | 所在类 | 环境定义 | 当前状态 | 补充覆盖 |
 |---|---|---|---|---|

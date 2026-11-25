@@ -3,6 +3,6 @@
   "order": 3,
   "color": "#E5732A",
   "icon": "minecraft:piston",
-  "home_mod": "earth_on_minecraft",
+  "home_mod": "earth_core",
   "has_root": true
 }
