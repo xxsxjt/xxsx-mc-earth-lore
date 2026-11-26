@@ -3,7 +3,10 @@ package com.xxsx.earthlore.study;
 import com.xxsx.earthlore.LoreConfig;
 import com.xxsx.earthlore.api.LoreLearnedEvent;
 import com.xxsx.earthlore.api.StudyResult;
+import com.xxsx.earthlore.condition.Conditions;
 import com.xxsx.earthlore.core.FailCodes;
+import com.xxsx.earthlore.data.ItemReq;
+import com.xxsx.earthlore.data.LoreIngredient;
 import com.xxsx.earthlore.core.StudyMath;
 import com.xxsx.earthlore.data.LoreText;
 import com.xxsx.earthlore.graph.LoreGraph;
@@ -95,7 +98,12 @@ public final class StudyService {
             anyUnknownToPlayer = true;
             List<Identifier> lacking = new ArrayList<>();
             if (KnowledgeService.prerequisitesMet(player.getUUID(), node.get(), lacking)) {
-                return StudyResult.ok(id, StudyMath.studyTicks(node.get().tier(), LoreConfig.studySpeed(), factor));
+                String reqFail = checkPlayerStudyRequirements(player, node.get());
+                if (reqFail != null) {
+                    return StudyResult.fail(reqFail, List.of());
+                }
+                int customTicks = node.get().data().studyTicks().orElse(0);
+                return StudyResult.ok(id, StudyMath.studyTicks(node.get().tier(), customTicks, LoreConfig.studySpeed(), factor));
             }
             for (Identifier id2 : lacking) {
                 if (!missing.contains(id2)) {
@@ -255,6 +263,38 @@ public final class StudyService {
 
     public static void clear() {
         SESSIONS.clear();
+    }
+
+    /** Evaluates per-node item ownership, XP level, realm, and environmental requirements during study. */
+    private static String checkPlayerStudyRequirements(ServerPlayer player, LoreGraph.Node node) {
+        if (player.isCreative()) {
+            return null;
+        }
+        for (ItemReq req : node.data().itemRequires()) {
+            if (req.hold().isPresent() && !carriesItem(player, req.hold().get())) {
+                return FailCodes.ITEM_MISSING;
+            }
+            if (req.cond().isPresent()) {
+                var cond = req.cond().get();
+                // Player-level conditions (xp_level / realm) always gate direct literature study too
+                if ((cond.kind() == com.xxsx.earthlore.data.LoreCondition.Kind.XP_LEVEL
+                        || cond.kind() == com.xxsx.earthlore.data.LoreCondition.Kind.REALM)
+                        && !Conditions.test(player.level(), player.blockPosition(), player, cond)) {
+                    return cond.failCode();
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean carriesItem(ServerPlayer player, LoreIngredient ingredient) {
+        var inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            if (ingredient.test(inv.getItem(i))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static Component failMessage(StudyResult result) {

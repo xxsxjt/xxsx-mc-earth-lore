@@ -14,6 +14,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
@@ -26,6 +28,8 @@ public final class ClientLore {
     public static final KeyMapping.Category CATEGORY = new KeyMapping.Category(EarthLore.id("earth_lore"));
     public static final KeyMapping TREE_KEY = new KeyMapping("key.earth_lore.tree", InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_K, CATEGORY);
+    public static final KeyMapping INSPECT_KNOWLEDGE_KEY = new KeyMapping("key.earth_lore.inspect_knowledge",
+            KeyConflictContext.GUI, InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_W, CATEGORY);
 
     private ClientLore() {
     }
@@ -41,6 +45,7 @@ public final class ClientLore {
         modBus.addListener(RegisterKeyMappingsEvent.class, event -> {
             event.registerCategory(CATEGORY);
             event.register(TREE_KEY);
+            event.register(INSPECT_KNOWLEDGE_KEY);
         });
         modBus.addListener(RegisterColorHandlersEvent.ItemTintSources.class,
                 event -> event.register(EarthLore.id("discipline"), DisciplineTint.MAP_CODEC));
@@ -48,6 +53,10 @@ public final class ClientLore {
                 event -> event.registerAbove(VanillaGuiLayers.HOTBAR, EarthLore.id("study"), StudyHud::render));
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, event -> tick());
         NeoForge.EVENT_BUS.addListener(ItemTooltipEvent.class, ClientTooltips::onTooltip);
+        NeoForge.EVENT_BUS.addListener(ScreenEvent.KeyPressed.Pre.class, ClientKnowledgeInspect::onKeyPressed);
+        NeoForge.EVENT_BUS.addListener(ScreenEvent.KeyReleased.Pre.class, ClientKnowledgeInspect::onKeyReleased);
+        NeoForge.EVENT_BUS.addListener(ScreenEvent.Render.Post.class, ClientKnowledgeInspect::onScreenRender);
+        NeoForge.EVENT_BUS.addListener(ScreenEvent.Closing.class, ClientKnowledgeInspect::onScreenClosing);
         NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingOut.class, event -> ClientKnowledge.reset());
         LiteratureItem.clientCanStudy = ClientKnowledge::canStudy;
     }

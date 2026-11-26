@@ -1,15 +1,25 @@
 package com.xxsx.earthlore.core;
 
-/** Durations from 10 册 A-005 and A-009, scaled by the server speed settings (A-020). */
+/** Study and research-table durations (scaled to 1/10 for responsive gameplay, with per-node override support). */
 public final class StudyMath {
     public static final int MAX_TIER = 15;
+    public static final double GLOBAL_TIME_SCALE = 0.1;
 
     private StudyMath() {
     }
 
-    /** 40 + 40 x tier ticks, times the literature form factor, divided by study_speed. */
     public static int studyTicks(int tier, double studySpeed, double formFactor) {
-        double base = 40.0 + 40.0 * Math.max(0, Math.min(MAX_TIER, tier));
+        return studyTicks(tier, 0, studySpeed, formFactor);
+    }
+
+    /**
+     * When {@code customTicks > 0}, uses that explicit per-node duration directly (allowing special/major
+     * knowledge nodes to set bespoke study times); otherwise uses 1/10 of the legacy tier curve.
+     */
+    public static int studyTicks(int tier, int customTicks, double studySpeed, double formFactor) {
+        double base = customTicks > 0
+                ? customTicks
+                : (40 + 40 * Math.max(0, Math.min(MAX_TIER, tier))) * GLOBAL_TIME_SCALE;
         double speed = Math.max(0.25, Math.min(4.0, studySpeed));
         double factor = formFactor > 0 ? formFactor : 1.0;
         return Math.max(1, (int) Math.ceil(base * factor / speed));
@@ -20,7 +30,7 @@ public final class StudyMath {
             return 0;
         }
         double speed = Math.max(0.25, Math.min(4.0, researchSpeed));
-        return Math.max(1, (int) Math.ceil(baseTicks / speed));
+        return Math.max(1, (int) Math.ceil((baseTicks * GLOBAL_TIME_SCALE) / speed));
     }
 
     public static int copyTicks(int nodes) {
@@ -31,4 +41,3 @@ public final class StudyMath {
         return 100 * Math.max(1, nodes);
     }
 }
-

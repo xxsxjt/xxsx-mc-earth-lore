@@ -228,5 +228,21 @@
   "jei.earth_lore.locked": "已锁定（需先掌握对应学识）",
   "jei.earth_lore.unlocked": "已解锁",
   "jei.earth_lore.soft_cap": "未学品质上限：%s",
-  "discipline.earth_lore.som": "锻体学"
+  "discipline.earth_lore.som": "锻体学",
+  "item.earth_lore.omniscience_codex": "万象真解（创造）",
+  "tooltip.earth_lore.omniscience_codex.line1": "创造模式专属：右键一键解锁全部已加载学识",
+  "tooltip.earth_lore.omniscience_codex.line2": "适用于测试、沙盒演示与整合包调试",
+  "message.earth_lore.omniscience_codex.creative_only": "万象真解仅限创造模式使用",
+  "message.earth_lore.omniscience_codex.unlocked": "万象洞明！已一键解锁 %s 项新学识（共 %s 项）",
+  "message.earth_lore.omniscience_codex.already_all": "已掌握全部 %s 项学识，无需重复解锁",
+  "lore.earth_lore.fail.xp_level_low": "原版经验等级不足",
+  "lore.earth_lore.fail.realm_low": "当前修行境界不足",
+  "condition.earth_lore.xp_level": "经验等级 >= %s",
+  "condition.earth_lore.realm": "修行境界 >= %s 阶",
+  "key.earth_lore.inspect_knowledge": "物品知识溯源（长按0.5秒跳转知识树）",
+  "tooltip.earth_lore.inspect.hint": "长按 [%s] 0.5秒 跳转知识树查看前置链",
+  "tooltip.earth_lore.inspect.holding": "长按 [%s] 查看：%s",
+  "tooltip.earth_lore.gate.summary_locked": "[知识受限] 需掌握：%s（已学 %s/%s）",
+  "tooltip.earth_lore.gate.summary_known": "[知识已掌握] %s（%s/%s）",
+  "screen.earth_lore.tree.focus_banner": "溯源定位：%s"
 }

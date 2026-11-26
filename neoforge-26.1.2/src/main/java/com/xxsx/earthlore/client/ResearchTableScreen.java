@@ -388,7 +388,8 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
                 Holder<Biome> biome = level.getBiome(pos);
                 yield id != null && (biome.is(TagKey.create(Registries.BIOME, id)) || biome.is(ResourceKey.create(Registries.BIOME, id)));
             }
-            case FIELD, AETHER, SANCTUM, STRUCTURE -> null;
+            case XP_LEVEL -> minecraft.player != null && (minecraft.player.isCreative() || minecraft.player.experienceLevel >= condition.number());
+            case FIELD, AETHER, SANCTUM, REALM, STRUCTURE -> null;
             case INVALID -> false;
         };
     }
@@ -396,7 +397,7 @@ public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMe
     static Component conditionLabel(LoreCondition condition) {
         String key = "condition.earth_lore." + condition.kind().name().toLowerCase(Locale.ROOT);
         return switch (condition.kind()) {
-            case FIELD, AETHER, SANCTUM, Y_AT_MOST, Y_AT_LEAST -> Component.translatable(key, condition.number());
+            case FIELD, AETHER, SANCTUM, XP_LEVEL, REALM, Y_AT_MOST, Y_AT_LEAST -> Component.translatable(key, condition.number());
             case DIM, STRUCTURE -> Component.translatable(key, condition.id());
             case BIOME -> {
                 Identifier id = Identifier.tryParse(condition.id());

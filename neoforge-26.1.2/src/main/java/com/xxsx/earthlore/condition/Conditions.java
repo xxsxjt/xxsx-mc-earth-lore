@@ -2,6 +2,7 @@ package com.xxsx.earthlore.condition;
 
 import com.xxsx.earthlore.EarthLore;
 import com.xxsx.earthlore.api.ConditionProvider;
+import com.xxsx.earthlore.api.PlayerConditionProvider;
 import com.xxsx.earthlore.data.LoreCondition;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,13 +12,16 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import org.jspecify.annotations.Nullable;
 
-/** Evaluates research conditions at a block position (10 册 A-005 step 5, A-021 condition codes). */
+/** Evaluates research and study conditions (world conditions + player XP/realm conditions). */
 public final class Conditions {
     private static final Map<String, ConditionProvider> PROVIDERS = new ConcurrentHashMap<>();
+    private static final Map<String, PlayerConditionProvider> PLAYER_PROVIDERS = new ConcurrentHashMap<>();
 
     private Conditions() {
     }
@@ -29,16 +33,27 @@ public final class Conditions {
         }
     }
 
-    public static boolean hasProvider(String key) {
-        return PROVIDERS.containsKey(key);
+    /** Registers a numeric player condition provider (e.g. "realm") evaluated against the studying/researching player. */
+    public static void registerPlayer(String key, PlayerConditionProvider provider) {
+        if (PLAYER_PROVIDERS.putIfAbsent(key, provider) != null) {
+            EarthLore.LOGGER.error("[earth_lore] player condition provider '{}' registered twice; keeping the first", key);
+        }
     }
 
-    /** Test hook: removes a provider so GameTests can check the "no provider" path. */
+    public static boolean hasProvider(String key) {
+        return PROVIDERS.containsKey(key) || PLAYER_PROVIDERS.containsKey(key);
+    }
+
     public static void unregisterForTest(String key) {
         PROVIDERS.remove(key);
+        PLAYER_PROVIDERS.remove(key);
     }
 
     public static boolean test(ServerLevel level, BlockPos pos, LoreCondition condition) {
+        return test(level, pos, null, condition);
+    }
+
+    public static boolean test(ServerLevel level, BlockPos pos, @Nullable ServerPlayer player, LoreCondition condition) {
         return switch (condition.kind()) {
             case NIGHT -> level.isDarkOutside();
             case DAY -> level.isBrightOutside();
@@ -48,6 +63,17 @@ public final class Conditions {
             case FIELD, AETHER, SANCTUM -> {
                 ConditionProvider provider = PROVIDERS.get(condition.providerKey());
                 yield provider != null && provider.value(level, pos) >= condition.number();
+            }
+            case XP_LEVEL -> player != null && (player.isCreative() || player.experienceLevel >= condition.number());
+            case REALM -> {
+                if (player == null) {
+                    yield false;
+                }
+                if (player.isCreative()) {
+                    yield true;
+                }
+                PlayerConditionProvider provider = PLAYER_PROVIDERS.get(condition.providerKey());
+                yield provider != null && provider.value(player) >= condition.number();
             }
             case Y_AT_MOST -> pos.getY() <= condition.number();
             case Y_AT_LEAST -> pos.getY() >= condition.number();
@@ -77,4 +103,3 @@ public final class Conditions {
                 .orElse(false);
     }
 }
-

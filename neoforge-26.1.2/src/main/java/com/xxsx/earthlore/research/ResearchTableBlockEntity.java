@@ -286,7 +286,7 @@ public class ResearchTableBlockEntity extends BaseContainerBlockEntity implement
                 return FailCodes.ITEM_MISSING;
             }
         }
-        String condition = failedCondition(level, node);
+        String condition = failedCondition(level, player, node);
         if (condition != null) {
             return condition;
         }
@@ -442,8 +442,13 @@ public class ResearchTableBlockEntity extends BaseContainerBlockEntity implement
     }
 
     private String failedCondition(ServerLevel level, LoreGraph.Node node) {
+        ServerPlayer ownerPlayer = owner == null || level.getServer() == null ? null : level.getServer().getPlayerList().getPlayer(owner);
+        return failedCondition(level, ownerPlayer, node);
+    }
+
+    private String failedCondition(ServerLevel level, ServerPlayer player, LoreGraph.Node node) {
         for (ItemReq req : node.data().itemRequires()) {
-            if (req.cond().isPresent() && !Conditions.test(level, worldPosition, req.cond().get())) {
+            if (req.cond().isPresent() && !Conditions.test(level, worldPosition, player, req.cond().get())) {
                 return req.cond().get().failCode();
             }
         }

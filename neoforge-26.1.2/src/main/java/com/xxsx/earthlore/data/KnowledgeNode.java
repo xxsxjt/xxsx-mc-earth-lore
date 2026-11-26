@@ -15,7 +15,16 @@ import net.minecraft.resources.Identifier;
 public record KnowledgeNode(Optional<Identifier> discipline, Optional<Integer> tier, Optional<String> gate,
                             List<Prereq> requires, List<ItemReq> itemRequires, List<UnlockRef> unlocks,
                             List<String> literature, List<Identifier> teachers, ResearchCost research,
-                            List<String> failCodes, Optional<String> nameKey, Optional<String> descKey) {
+                            List<String> failCodes, Optional<String> nameKey, Optional<String> descKey,
+                            Optional<Integer> studyTicks) {
+    /** Backward-compatible 12-argument constructor for existing tests and fixtures. */
+    public KnowledgeNode(Optional<Identifier> discipline, Optional<Integer> tier, Optional<String> gate,
+                         List<Prereq> requires, List<ItemReq> itemRequires, List<UnlockRef> unlocks,
+                         List<String> literature, List<Identifier> teachers, ResearchCost research,
+                         List<String> failCodes, Optional<String> nameKey, Optional<String> descKey) {
+        this(discipline, tier, gate, requires, itemRequires, unlocks, literature, teachers, research,
+                failCodes, nameKey, descKey, Optional.empty());
+    }
     public static final Codec<Prereq> PREREQ_CODEC = Codec.either(
             Identifier.CODEC.fieldOf("all").codec(),
             Identifier.CODEC.listOf().fieldOf("any").codec()
@@ -38,7 +47,8 @@ public record KnowledgeNode(Optional<Identifier> discipline, Optional<Integer> t
             ResearchCost.CODEC.optionalFieldOf("research", ResearchCost.NONE).forGetter(KnowledgeNode::research),
             Codec.STRING.listOf().optionalFieldOf("fail_codes", List.of()).forGetter(KnowledgeNode::failCodes),
             Codec.STRING.optionalFieldOf("name_key").forGetter(KnowledgeNode::nameKey),
-            Codec.STRING.optionalFieldOf("desc_key").forGetter(KnowledgeNode::descKey)
+            Codec.STRING.optionalFieldOf("desc_key").forGetter(KnowledgeNode::descKey),
+            Codec.intRange(1, 24000).optionalFieldOf("study_ticks").forGetter(KnowledgeNode::studyTicks)
     ).apply(instance, KnowledgeNode::new));
 }
 
