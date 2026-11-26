@@ -1,11 +1,15 @@
-name: Build Earth Lore (JDK 25 / NeoForge 26.1.2)
+name: Build & Release Earth Lore (JDK 25 / NeoForge 26.1.2)
 
 on:
   push:
     branches: [ main, 'feat/**', 'refactor/**' ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,14 +21,21 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
       - name: Build & Test
         working-directory: neoforge-26.1.2
         run: >
-          ./gradlew build --no-daemon
-          -Dhttp.proxyHost= -Dhttps.proxyHost=
-          -Dhttp.proxyPort= -Dhttps.proxyPort=
+          gradle build --no-daemon
           -Dorg.gradle.java.installations.paths=$JAVA_HOME
       - uses: actions/upload-artifact@v4
         with:
           name: earth-lore-neoforge-26.1.2-jar
           path: neoforge-26.1.2/build/libs/*.jar
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: neoforge-26.1.2/build/libs/*.jar
+          fail_on_unmatched_files: true
+          overwrite_files: true
