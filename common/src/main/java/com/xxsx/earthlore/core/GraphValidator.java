@@ -6,51 +6,81 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.function.Predicate;
 
 /**
- * Load-time checks for knowledge nodes (10 册 A-002). Each rejected node gets exactly one failure code;
- * successors of rejected nodes are rejected in cascade so gated content never opens silently.
+ * Pure-Java graph validation (10 册 A-004, A-019) with automatic missing-companion-mod detection:
+ * when a node references a prerequisite from an uninstalled optional companion mod, earth_lore
+ * detects that the mod is not loaded and gracefully prunes that cross-mod prerequisite while still
+ * strictly rejecting typos or broken references within installed mods.
  */
 public final class GraphValidator {
-    /** Whether {@code other} is a mandatory dependency of {@code owner} (same namespace always counts). */
     @FunctionalInterface
     public interface DependencyRule {
-        boolean required(String ownerNamespace, String otherNamespace);
+        boolean required(String ownerMod, String otherMod);
     }
 
-    public record Result(Map<String, NodeDef> accepted, Map<String, String> rejected) {
+    public record Result(Map<String, NodeDef> accepted, Map<String, String> rejected,
+                         Set<String> missingCompanionMods, Map<String, List<String>> skippedUnloadedPrereqs) {
+        public Result(Map<String, NodeDef> accepted, Map<String, String> rejected) {
+            this(accepted, rejected, Set.of(), Map.of());
+        }
+
         public Map<String, Integer> rejectedByCode() {
             Map<String, Integer> counts = new TreeMap<>();
             for (String code : rejected.values()) {
                 counts.merge(code, 1, Integer::sum);
             }
-            return counts;
+            return Collections.unmodifiableMap(counts);
         }
     }
 
     private GraphValidator() {
     }
 
+    /** Legacy 3-arg overload: assumes all referenced namespaces are installed mods. */
     public static Result validate(Collection<NodeDef> nodes, Set<String> disciplines, DependencyRule deps) {
-        Map<String, NodeDef> all = new TreeMap<>();
+        return validate(nodes, disciplines, deps, ns -> true);
+    }
+
+    /**
+     * Full validator with {@code modLoaded} detection. Any prerequisite referencing an uninstalled
+     * non-required companion mod is auto-detected, recorded in {@link Result#missingCompanionMods()},
+     * and pruned from the active prerequisite list so optional cross-mod links never softlock nodes.
+     */
+    public static Result validate(Collection<NodeDef> nodes, Set<String> disciplines,
+                                  DependencyRule deps, Predicate<String> modLoaded) {
+        Map<String, NodeDef> raw = new LinkedHashMap<>();
         for (NodeDef node : nodes) {
-            all.put(node.id(), node);
+            raw.put(node.id(), node);
         }
+
+        Set<String> missingMods = new TreeSet<>();
+        Map<String, List<String>> skippedPrereqs = new TreeMap<>();
+        Map<String, NodeDef> all = new LinkedHashMap<>();
+        for (NodeDef node : raw.values()) {
+            all.put(node.id(), pruneUnloadedCompanionPrereqs(node, raw, deps, modLoaded, missingMods, skippedPrereqs));
+        }
+
         Map<String, String> rejected = new TreeMap<>();
         for (NodeDef node : all.values()) {
-            String code = staticFailure(node, all, disciplines, deps);
-            if (code != null) {
-                rejected.put(node.id(), code);
+            String failure = staticFailure(node, all, disciplines, deps);
+            if (failure != null) {
+                rejected.put(node.id(), failure);
             }
         }
         Map<String, List<String>> owners = new HashMap<>();
         for (NodeDef node : all.values()) {
-            for (String key : new LinkedHashSet<>(node.unlockKeys())) {
+            if (rejected.containsKey(node.id())) {
+                continue;
+            }
+            for (String key : node.unlockKeys()) {
                 owners.computeIfAbsent(key, ignored -> new ArrayList<>()).add(node.id());
             }
         }
@@ -72,7 +102,70 @@ public final class GraphValidator {
                 accepted.put(node.id(), node);
             }
         }
-        return new Result(Collections.unmodifiableMap(accepted), Collections.unmodifiableMap(rejected));
+        Map<String, List<String>> immutableSkipped = new TreeMap<>();
+        skippedPrereqs.forEach((k, v) -> immutableSkipped.put(k, List.copyOf(v)));
+        return new Result(
+                Collections.unmodifiableMap(accepted),
+                Collections.unmodifiableMap(rejected),
+                Collections.unmodifiableSet(missingMods),
+                Collections.unmodifiableMap(immutableSkipped)
+        );
+    }
+
+    private static NodeDef pruneUnloadedCompanionPrereqs(NodeDef node, Map<String, NodeDef> raw,
+                                                         DependencyRule deps, Predicate<String> modLoaded,
+                                                         Set<String> missingMods,
+                                                         Map<String, List<String>> skippedPrereqs) {
+        if (node.requires().isEmpty()) {
+            return node;
+        }
+        String ns = node.namespace();
+        List<Prereq> effective = new ArrayList<>(node.requires().size());
+        boolean modified = false;
+        for (Prereq prereq : node.requires()) {
+            if (prereq instanceof Prereq.All required) {
+                String otherNs = NodeIds.namespace(required.node());
+                boolean unloadedCompanion = !raw.containsKey(required.node())
+                        && !otherNs.equals(ns)
+                        && !modLoaded.test(otherNs)
+                        && !deps.required(ns, otherNs);
+                if (unloadedCompanion) {
+                    missingMods.add(otherNs);
+                    skippedPrereqs.computeIfAbsent(node.id(), ignored -> new ArrayList<>()).add(required.node());
+                    modified = true;
+                    continue;
+                }
+                effective.add(prereq);
+            } else if (prereq instanceof Prereq.Any group) {
+                List<String> kept = new ArrayList<>();
+                List<String> unloaded = new ArrayList<>();
+                for (String member : group.nodes()) {
+                    String otherNs = NodeIds.namespace(member);
+                    boolean unloadedCompanion = !raw.containsKey(member)
+                            && !otherNs.equals(ns)
+                            && !modLoaded.test(otherNs)
+                            && !deps.required(ns, otherNs);
+                    if (unloadedCompanion) {
+                        missingMods.add(otherNs);
+                        unloaded.add(member);
+                    } else {
+                        kept.add(member);
+                    }
+                }
+                if (!unloaded.isEmpty()) {
+                    skippedPrereqs.computeIfAbsent(node.id(), ignored -> new ArrayList<>()).addAll(unloaded);
+                    modified = true;
+                }
+                if (!kept.isEmpty()) {
+                    effective.add(kept.size() == group.nodes().size() ? prereq : new Prereq.Any(List.copyOf(kept)));
+                }
+            }
+        }
+        if (!modified) {
+            return node;
+        }
+        return new NodeDef(node.id(), node.discipline(), node.tier(), node.gate(),
+                List.copyOf(effective), node.unlockKeys(), node.badReference());
     }
 
     private static String staticFailure(NodeDef node, Map<String, NodeDef> all, Set<String> disciplines,
@@ -131,11 +224,7 @@ public final class GraphValidator {
                     continue;
                 }
                 for (Prereq prereq : node.requires()) {
-                    boolean ok = prereq.members().stream().anyMatch(m -> loaded(m, all, rejected));
-                    if (prereq instanceof Prereq.All all1) {
-                        ok = loaded(all1.node(), all, rejected);
-                    }
-                    if (!ok) {
+                    if (prereq.members().stream().noneMatch(member -> loaded(member, all, rejected))) {
                         rejected.put(node.id(), FailCodes.MISSING_PREREQ);
                         changed = true;
                         any = true;
@@ -147,7 +236,6 @@ public final class GraphValidator {
         return any;
     }
 
-    /** Tarjan SCC over accepted nodes; every node on a cycle is rejected. */
     private static boolean rejectCycles(Map<String, NodeDef> all, Map<String, String> rejected) {
         Map<String, Integer> index = new HashMap<>();
         Map<String, Integer> low = new HashMap<>();
@@ -174,7 +262,6 @@ public final class GraphValidator {
     private static void strongConnect(String start, Map<String, NodeDef> all, Map<String, String> rejected,
                                       Map<String, Integer> index, Map<String, Integer> low, Deque<String> stack,
                                       Set<String> onStack, int[] counter, List<List<String>> cycles) {
-        // Iterative Tarjan to avoid deep recursion on long chains.
         Deque<Object[]> work = new ArrayDeque<>();
         work.push(new Object[]{start, 0});
         while (!work.isEmpty()) {
@@ -232,4 +319,3 @@ public final class GraphValidator {
         return out;
     }
 }
-

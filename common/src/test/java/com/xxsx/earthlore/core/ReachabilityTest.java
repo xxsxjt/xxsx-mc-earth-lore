@@ -42,5 +42,21 @@ class ReachabilityTest {
         assertTrue(report.learnable().contains("a:geo/next"));
         assertEquals(List.of("a:geo/orphan"), List.copyOf(report.unreachable()));
     }
-}
 
+    @org.junit.jupiter.api.Test
+    void prerequisiteChainCollectsAndOrAncestors() {
+        java.util.Map<String, NodeDef> nodes = new java.util.LinkedHashMap<>();
+        nodes.put("x:root", new NodeDef("x:root", "x:d", 0, Gate.HARD, java.util.List.of(), java.util.List.of(), false));
+        nodes.put("x:alt_a", new NodeDef("x:alt_a", "x:d", 1, Gate.HARD, java.util.List.of(new Prereq.All("x:root")), java.util.List.of(), false));
+        nodes.put("x:alt_b", new NodeDef("x:alt_b", "x:d", 1, Gate.HARD, java.util.List.of(new Prereq.All("x:root")), java.util.List.of(), false));
+        nodes.put("x:talisman", new NodeDef("x:talisman", "x:d", 2, Gate.HARD,
+                java.util.List.of(new Prereq.Any(java.util.List.of("x:alt_a", "x:alt_b"))), java.util.List.of(), false));
+        nodes.put("x:unrelated", new NodeDef("x:unrelated", "x:d", 0, Gate.HARD, java.util.List.of(), java.util.List.of(), false));
+
+        java.util.Set<String> chain = Reachability.prerequisiteChain(nodes, "x:talisman");
+        org.junit.jupiter.api.Assertions.assertEquals(
+                java.util.Set.of("x:talisman", "x:alt_a", "x:alt_b", "x:root"), chain);
+        org.junit.jupiter.api.Assertions.assertFalse(chain.contains("x:unrelated"));
+        org.junit.jupiter.api.Assertions.assertTrue(Reachability.prerequisiteChain(nodes, "x:missing").isEmpty());
+    }
+}

@@ -4,6 +4,8 @@ import com.xxsx.earthlore.EarthLore;
 import com.xxsx.earthlore.LoreConfig;
 import com.xxsx.earthlore.api.GateResult;
 import com.xxsx.earthlore.client.ClientKnowledge;
+import com.xxsx.earthlore.client.ClientKnowledgeInspect;
+import com.xxsx.earthlore.client.ClientLore;
 import com.xxsx.earthlore.core.Prereq;
 import com.xxsx.earthlore.data.UnlockRef;
 import com.xxsx.earthlore.graph.LoreGraph;
@@ -15,6 +17,8 @@ import java.util.Set;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.constants.RecipeTypes;
+import mezz.jei.api.constants.VanillaTypes;
+import mezz.jei.api.runtime.IJeiRuntime;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
@@ -50,6 +54,23 @@ public final class LoreJeiPlugin implements IModPlugin {
     @Override
     public Identifier getPluginUid() {
         return UID;
+    }
+
+    @Override
+    public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
+        ClientKnowledgeInspect.setJeiHoverSupplier(() -> {
+            ItemStack fromList = jeiRuntime.getIngredientListOverlay().getIngredientUnderMouse(VanillaTypes.ITEM_STACK);
+            if (fromList != null && !fromList.isEmpty()) {
+                return fromList;
+            }
+            ItemStack fromBookmark = jeiRuntime.getBookmarkOverlay().getItemStackUnderMouse();
+            return fromBookmark != null ? fromBookmark : ItemStack.EMPTY;
+        });
+    }
+
+    @Override
+    public void onRuntimeUnavailable() {
+        ClientKnowledgeInspect.clearJeiHoverSupplier();
     }
 
     @Override
@@ -113,6 +134,8 @@ public final class LoreJeiPlugin implements IModPlugin {
             lines.add(Component.translatable("jei.earth_lore.info.prereq", names));
         }
         lines.add(Component.translatable("jei.earth_lore.info.how"));
+        lines.add(Component.translatable("tooltip.earth_lore.inspect.hint",
+                ClientLore.INSPECT_KNOWLEDGE_KEY.getTranslatedKeyMessage()));
         return lines.toArray(Component[]::new);
     }
 

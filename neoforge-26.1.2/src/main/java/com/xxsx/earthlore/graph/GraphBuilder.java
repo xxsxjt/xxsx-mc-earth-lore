@@ -73,13 +73,21 @@ public final class GraphBuilder {
         }
         Set<String> disciplineIds = new java.util.HashSet<>();
         disciplines.keySet().forEach(id -> disciplineIds.add(id.toString()));
-        GraphValidator.Result result = GraphValidator.validate(defs.values(), disciplineIds, GraphBuilder::dependsOn);
+        GraphValidator.Result result = GraphValidator.validate(defs.values(), disciplineIds,
+                GraphBuilder::dependsOn, GraphBuilder::isNamespaceLoaded);
+        if (!result.missingCompanionMods().isEmpty()) {
+            EarthLore.LOGGER.info("[earth_lore] auto-detected absent companion mods {}; skipped cross-mod prerequisites on {} nodes",
+                    result.missingCompanionMods(), result.skippedUnloadedPrereqs().size());
+        }
+        // Apply pruned effective NodeDefs so runtime prerequisite checks skip absent companion mods seamlessly
+        Map<Identifier, NodeDef> effectiveDefs = new HashMap<>(defs);
+        result.accepted().forEach((id, def) -> effectiveDefs.put(Identifier.parse(id), def));
         Map<Identifier, String> rejected = new TreeMap<>();
         result.rejected().forEach((id, code) -> {
             rejected.put(Identifier.parse(id), code);
             EarthLore.LOGGER.warn("[earth_lore] rejected node {} {}", id, code);
         });
-        LoreGraph graph = LoreGraph.build(disciplines, raw, defs, rejected);
+        LoreGraph graph = LoreGraph.build(disciplines, raw, effectiveDefs, rejected);
         Reachability.Report reach = Reachability.compute(result.accepted());
         for (String id : reach.unreachable()) {
             EarthLore.LOGGER.error("[earth_lore] {} {}", FailCodes.UNREACHABLE, id);
@@ -98,9 +106,15 @@ public final class GraphBuilder {
         Map<Identifier, KnowledgeNode> raw = rawNodes(access);
         Map<Identifier, NodeDef> defs = new HashMap<>();
         raw.forEach((id, node) -> defs.put(id, toDef(id, node, disciplines, false)));
+        Set<String> disciplineIds = new java.util.HashSet<>();
+        disciplines.keySet().forEach(id -> disciplineIds.add(id.toString()));
+        GraphValidator.Result clientValidated = GraphValidator.validate(defs.values(), disciplineIds,
+                GraphBuilder::dependsOn, GraphBuilder::isNamespaceLoaded);
+        Map<Identifier, NodeDef> effectiveDefs = new HashMap<>(defs);
+        clientValidated.accepted().forEach((id, def) -> effectiveDefs.put(Identifier.parse(id), def));
         Map<Identifier, String> rejected = new TreeMap<>();
         rejectedIds.forEach(id -> rejected.put(id, "rejected"));
-        return LoreGraph.build(disciplines, raw, defs, rejected);
+        return LoreGraph.build(disciplines, raw, effectiveDefs, rejected);
     }
 
     public static NodeDef toDef(Identifier id, KnowledgeNode node, Map<Identifier, Discipline> disciplines,
@@ -166,6 +180,15 @@ public final class GraphBuilder {
     }
 
     /** True when mod owner is other or declares other as a required dependency (11 册 §5 rule 4, A-014 rule 3). */
+    /** Automatic companion-mod presence detection for cross-mod knowledge prerequisites. */
+    public static boolean isNamespaceLoaded(String namespace) {
+        return namespace == null || namespace.isBlank()
+                || "minecraft".equals(namespace)
+                || "c".equals(namespace)
+                || "neoforge".equals(namespace)
+                || ModList.get().isLoaded(namespace);
+    }
+
     public static boolean dependsOn(String owner, String other) {
         if (owner.equals(other)) {
             return true;

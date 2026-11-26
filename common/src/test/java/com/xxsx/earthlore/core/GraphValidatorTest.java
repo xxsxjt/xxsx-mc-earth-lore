@@ -91,5 +91,32 @@ class GraphValidatorTest {
         ), DISCIPLINES, ONLY_LORE);
         assertTrue(result.accepted().containsKey("x:xua/top"));
     }
-}
 
+    @Test
+    void autoSkipsMissingCompanionModPrerequisitesWithoutBreakingNode() {
+        Set<String> loadedMods = Set.of("earth_lore", "x");
+        var result = GraphValidator.validate(List.of(
+                node("x:xua/root", "earth_lore:xua", 0, Gate.ROOT, List.of(), List.of()),
+                node("x:xua/cross_all", "earth_lore:xua", 1, Gate.SOFT,
+                        List.of(new Prereq.All("x:xua/root"), new Prereq.All("earth_magic:arcane_basics")), List.of()),
+                node("x:xua/cross_any_all_missing", "earth_lore:xua", 1, Gate.SOFT,
+                        List.of(new Prereq.Any(List.of("earth_magic:a", "earth_theology:b"))), List.of())
+        ), DISCIPLINES, ONLY_LORE, loadedMods::contains);
+        assertTrue(result.accepted().containsKey("x:xua/cross_all"));
+        assertTrue(result.accepted().containsKey("x:xua/cross_any_all_missing"));
+        assertTrue(result.missingCompanionMods().contains("earth_magic"));
+        assertTrue(result.missingCompanionMods().contains("earth_theology"));
+        assertEquals(1, result.accepted().get("x:xua/cross_all").requires().size());
+        assertTrue(result.accepted().get("x:xua/cross_any_all_missing").requires().isEmpty());
+    }
+
+    @Test
+    void stillRejectsMissingPrereqWhenCompanionModIsActuallyLoaded() {
+        Set<String> loadedMods = Set.of("earth_lore", "x", "earth_magic");
+        var result = GraphValidator.validate(List.of(
+                node("x:xua/typo", "earth_lore:xua", 1, Gate.SOFT,
+                        List.of(new Prereq.All("earth_magic:nonexistent_typo")), List.of())
+        ), DISCIPLINES, ONLY_LORE, loadedMods::contains);
+        assertEquals(FailCodes.MISSING_PREREQ, result.rejected().get("x:xua/typo"));
+    }
+}

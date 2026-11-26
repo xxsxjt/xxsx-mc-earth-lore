@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.ArrayDeque;
+import java.util.LinkedHashSet;
 import java.util.TreeSet;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -79,6 +81,8 @@ public class LoreTreeScreen extends Screen {
     }
 
     private final Screen parent;
+    private final LoreGraph.Node focusNode;
+    private Set<Identifier> chainNodeIds = Set.of();
     private Button hubButton;
     private List<Identifier> tabs = List.of();
     private Identifier current;
@@ -95,7 +99,7 @@ public class LoreTreeScreen extends Screen {
     private Identifier cachedDiscipline;
 
     public LoreTreeScreen() {
-        this(null, null);
+        this(null, (Identifier) null);
     }
 
     public LoreTreeScreen(Identifier initialDiscipline) {
@@ -103,12 +107,45 @@ public class LoreTreeScreen extends Screen {
     }
 
     public LoreTreeScreen(Screen parent, Identifier initialDiscipline) {
+        this(parent, initialDiscipline, null);
+    }
+
+    public LoreTreeScreen(Screen parent, LoreGraph.Node focusNode) {
+        this(parent, focusNode != null ? focusNode.discipline() : null, focusNode);
+    }
+
+    private LoreTreeScreen(Screen parent, Identifier initialDiscipline, LoreGraph.Node focusNode) {
         super(Component.translatable(KEY + "title"));
         this.parent = parent;
+        this.focusNode = focusNode;
         if (initialDiscipline != null) {
             this.current = initialDiscipline;
             lastDiscipline = initialDiscipline;
         }
+    }
+
+    public static Set<Identifier> collectPrerequisiteChain(LoreGraph graph, Identifier targetId) {
+        Set<Identifier> chain = new LinkedHashSet<>();
+        if (graph == null || targetId == null || graph.node(targetId).isEmpty()) {
+            return chain;
+        }
+        ArrayDeque<Identifier> queue = new ArrayDeque<>();
+        chain.add(targetId);
+        queue.add(targetId);
+        while (!queue.isEmpty()) {
+            Identifier cur = queue.poll();
+            graph.node(cur).ifPresent(node -> {
+                for (Prereq prereq : node.def().requires()) {
+                    for (String raw : prereq.members()) {
+                        Identifier pid = Identifier.tryParse(raw);
+                        if (pid != null && graph.node(pid).isPresent() && chain.add(pid)) {
+                            queue.add(pid);
+                        }
+                    }
+                }
+            });
+        }
+        return chain;
     }
 
     @Override
@@ -129,7 +166,19 @@ public class LoreTreeScreen extends Screen {
                     ? lastDiscipline
                     : firstWithNodes(graph);
         }
+        if (focusNode != null) {
+            chainNodeIds = collectPrerequisiteChain(graph, focusNode.id());
+            if (tabs.contains(focusNode.discipline())) {
+                current = focusNode.discipline();
+                lastDiscipline = current;
+            }
+        } else {
+            chainNodeIds = Set.of();
+        }
         rebuild();
+        if (focusNode != null) {
+            jumpTo(focusNode);
+        }
     }
 
     private boolean canOpenCultivationHub() {
@@ -405,8 +454,11 @@ public class LoreTreeScreen extends Screen {
             }
         }
         for (Edge edge : edges) {
-            boolean activeEdge = hovered != null && (hovered.equals(edge.from()) || hovered.equals(edge.to()));
-            drawEdge(g, graph, edge, ox, oy, activeEdge);
+            boolean onChain = !chainNodeIds.isEmpty()
+                    && chainNodeIds.contains(edge.from().node().id())
+                    && chainNodeIds.contains(edge.to().node().id());
+            boolean activeEdge = onChain || (hovered != null && (hovered.equals(edge.from()) || hovered.equals(edge.to())));
+            drawEdge(g, graph, edge, ox, oy, activeEdge, onChain);
         }
         for (Placed p : placed) {
             boolean hover = hovered == p;
@@ -539,6 +591,10 @@ public class LoreTreeScreen extends Screen {
                         statusPart.append(Component.literal(" | ").withColor(0xFF606468))
                                 .append(Component.translatable(KEY + "partial_addon", d.homeMod()).withColor(0xFFD4B254)));
             }
+            if (focusNode != null) {
+                statusPart.append(Component.literal(" | ").withColor(0xFF606468))
+                        .append(Component.translatable(KEY + "focus_banner", NodeTooltip.name(focusNode)).withColor(0xFFFFD45A));
+            }
             g.text(font, LoreGui.fit(font, statusPart, remaining), nextX, HEADER_Y, 0xFFB0B0B0, true);
         }
     }
@@ -558,7 +614,7 @@ public class LoreTreeScreen extends Screen {
                 : Component.translatable(KEY + "count", self, nodes.size());
     }
 
-    private void drawEdge(GuiGraphicsExtractor g, LoreGraph graph, Edge edge, int ox, int oy, boolean highlighted) {
+    private void drawEdge(GuiGraphicsExtractor g, LoreGraph graph, Edge edge, int ox, int oy, boolean highlighted, boolean onChain) {
         Placed from = edge.from();
         Placed to = edge.to();
         int ax = ox + from.x() + NODE_W;
@@ -567,7 +623,7 @@ public class LoreTreeScreen extends Screen {
         int by = oy + to.y() + NODE_H / 2;
         int rgb = graph.discipline(from.node().discipline()).map(LoreColors::onDark).orElse(0x808080);
         int alpha = highlighted || ClientKnowledge.knows(from.node().id()) ? 0xFF000000 : 0x98000000;
-        int color = highlighted ? 0xFFFFFFFF : (alpha | (rgb & 0xFFFFFF));
+        int color = onChain ? 0xFFFFD45A : (highlighted ? 0xFFFFFFFF : (alpha | (rgb & 0xFFFFFF)));
         int mid = bx - (COL_W - NODE_W) / 2;
         if (mid <= ax) {
             mid = (ax + bx) / 2;
@@ -597,9 +653,15 @@ public class LoreTreeScreen extends Screen {
         };
         g.fill(x + 1, y + 1, x + NODE_W + 1, y + NODE_H + 1, 0x55000000);
         g.fill(x, y, x + NODE_W, y + NODE_H, fill);
-        LoreGui.outline(g, x, y, NODE_W, NODE_H, hover ? 0xFFFFFFFF : border, p.visitor());
+        boolean isFocused = focusNode != null && focusNode.id().equals(p.node().id());
+        boolean isChainMember = !chainNodeIds.isEmpty() && chainNodeIds.contains(p.node().id());
+        int effectiveBorder = isFocused ? 0xFFFFD45A : (hover ? 0xFFFFFFFF : (isChainMember ? 0xFFE6B84C : border));
+        LoreGui.outline(g, x, y, NODE_W, NODE_H, effectiveBorder, p.visitor());
         if (!p.visitor()) {
-            g.outline(x + 1, y + 1, NODE_W - 2, NODE_H - 2, hover ? 0xFFFFFFFF : border);
+            g.outline(x + 1, y + 1, NODE_W - 2, NODE_H - 2, effectiveBorder);
+        }
+        if (isFocused) {
+            g.outline(x - 1, y - 1, NODE_W + 2, NODE_H + 2, 0xFFFFE57F);
         }
         int textRoom = NODE_W - 8;
         if (state == NodeTooltip.State.OTHERS) {
@@ -732,6 +794,15 @@ public class LoreTreeScreen extends Screen {
         }
         clampScroll();
         return true;
+    }
+
+    @Override
+    public void onClose() {
+        if (parent != null && minecraft != null) {
+            minecraft.setScreen(parent);
+            return;
+        }
+        super.onClose();
     }
 
     @Override

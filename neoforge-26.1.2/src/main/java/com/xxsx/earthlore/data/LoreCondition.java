@@ -13,7 +13,8 @@ public record LoreCondition(Kind kind, int number, String id, String raw) {
         NIGHT("needs_night"), DAY("needs_day"), SKY("sky_blocked"), RAIN("needs_rain"), THUNDER("needs_thunder"),
         FIELD("field_low"), AETHER("aether_low"), SANCTUM("sanctum_low"),
         Y_AT_MOST("too_shallow"), Y_AT_LEAST("too_low_altitude"),
-        DIM("wrong_dimension"), BIOME("wrong_biome"), STRUCTURE("not_in_structure"), INVALID("lore_bad_unlock");
+        DIM("wrong_dimension"), BIOME("wrong_biome"), STRUCTURE("not_in_structure"),
+        XP_LEVEL("xp_level_low"), REALM("realm_low"), INVALID("lore_bad_unlock");
 
         private final String failCode;
 
@@ -51,6 +52,15 @@ public record LoreCondition(Kind kind, int number, String id, String raw) {
                 return value != null && value >= 0 && value <= 100
                         ? new LoreCondition(kind, value, "", text) : invalid(text);
             }
+        }
+        if (text.startsWith("xp_level>=") || text.startsWith("xp>=")) {
+            int offset = text.startsWith("xp_level>=") ? 10 : 4;
+            Integer value = number(text.substring(offset));
+            return value != null && value >= 0 ? new LoreCondition(Kind.XP_LEVEL, value, "", text) : invalid(text);
+        }
+        if (text.startsWith("realm>=")) {
+            Integer value = number(text.substring(7));
+            return value != null && value >= 0 ? new LoreCondition(Kind.REALM, value, "", text) : invalid(text);
         }
         if (text.startsWith("y<=") || text.startsWith("y>=")) {
             Integer value = number(text.substring(3));
@@ -92,6 +102,7 @@ public record LoreCondition(Kind kind, int number, String id, String raw) {
             case FIELD -> "field";
             case AETHER -> "aether";
             case SANCTUM -> "sanctum";
+            case REALM -> "realm";
             default -> "";
         };
     }

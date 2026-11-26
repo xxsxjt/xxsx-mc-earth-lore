@@ -17,7 +17,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.event.entity.player.ItemTooltipEvent;
 
-/** Literature lines (A-004 rule 4, A-007) and Shift gate lines on any gated item (A-018). */
+/** Literature lines (A-004 rule 4, A-007), always-visible gate status + hold-W jump hint, and Shift breakdown. */
 final class ClientTooltips {
     private ClientTooltips() {
     }
@@ -39,8 +39,17 @@ final class ClientTooltips {
             gateLines(graph, gates, extra);
         }
         if (!extra.isEmpty()) {
+            if (ClientKnowledgeInspect.primaryNodeFor(stack).isPresent()) {
+                extra.add(inspectHintLine());
+            }
             lines.addAll(Math.min(1, lines.size()), extra);
         }
+    }
+
+    static Component inspectHintLine() {
+        return Component.translatable("tooltip.earth_lore.inspect.hint",
+                ClientLore.INSPECT_KNOWLEDGE_KEY.getTranslatedKeyMessage().copy().withStyle(ChatFormatting.YELLOW))
+                .withStyle(ChatFormatting.DARK_GRAY);
     }
 
     static Component disciplineName(LoreGraph graph, Identifier id) {
@@ -84,20 +93,68 @@ final class ClientTooltips {
     }
 
     private static void gateLines(LoreGraph graph, LoreGraph.Gates gates, List<Component> out) {
+        List<LoreGraph.Node> allNodes = gates.nodes();
+        List<LoreGraph.Node> missingNodes = new ArrayList<>();
+        int knownCount = 0;
+        for (LoreGraph.Node node : allNodes) {
+            if (ClientKnowledge.knows(node.id())) {
+                knownCount++;
+            } else {
+                missingNodes.add(node);
+            }
+        }
+        GateResult result = ClientKnowledge.check(gates);
         if (!Minecraft.getInstance().hasShiftDown()) {
+            if (result.locked() || !missingNodes.isEmpty()) {
+                MutableComponent missingNames = Component.empty();
+                int limit = Math.min(2, missingNodes.size());
+                for (int i = 0; i < limit; i++) {
+                    if (i > 0) {
+                        missingNames.append("、");
+                    }
+                    missingNames.append(Component.translatable(missingNodes.get(i).nameKey()));
+                }
+                if (missingNodes.size() > limit) {
+                    missingNames.append("...");
+                }
+                out.add(Component.translatable("tooltip.earth_lore.gate.summary_locked",
+                        missingNames, knownCount, allNodes.size())
+                        .withStyle(result.locked() ? ChatFormatting.RED : ChatFormatting.GOLD));
+            } else if (!allNodes.isEmpty()) {
+                out.add(Component.translatable("tooltip.earth_lore.gate.summary_known",
+                        Component.translatable(allNodes.get(0).nameKey()), knownCount, allNodes.size())
+                        .withStyle(ChatFormatting.GREEN));
+            }
             out.add(Component.translatable("tooltip.earth_lore.gate.hint").withStyle(ChatFormatting.DARK_GRAY));
             return;
         }
-        for (LoreGraph.Node node : gates.nodes()) {
+        for (LoreGraph.Node node : allNodes) {
             boolean known = ClientKnowledge.knows(node.id());
             out.add(Component.translatable("tooltip.earth_lore.gate.node", Component.translatable(node.nameKey()),
                     disciplineName(graph, node.discipline()), Component.translatable("tooltip.earth_lore.gate." + node.gate().id()))
                     .withStyle(known ? ChatFormatting.GREEN : ChatFormatting.GOLD));
+            if (!known) {
+                List<Identifier> missingPrereqs = new ArrayList<>();
+                if (!ClientKnowledge.prerequisitesMet(node, missingPrereqs) && !missingPrereqs.isEmpty()) {
+                    MutableComponent prereqNames = Component.empty();
+                    for (int i = 0; i < missingPrereqs.size(); i++) {
+                        if (i > 0) {
+                            prereqNames.append(", ");
+                        }
+                        Identifier pid = missingPrereqs.get(i);
+                        prereqNames.append(graph.node(pid).map(n -> (Component) Component.translatable(n.nameKey()))
+                                .orElse(Component.literal(pid.toString())));
+                    }
+                    out.add(Component.literal("   ")
+                            .append(Component.translatable("tooltip.earth_lore.missing"))
+                            .append(prereqNames)
+                            .withStyle(ChatFormatting.RED));
+                }
+            }
         }
         if (gates.lockedByRejected()) {
             out.add(Component.translatable("tooltip.earth_lore.gate.rejected").withStyle(ChatFormatting.RED));
         }
-        GateResult result = ClientKnowledge.check(gates);
         out.add(result.locked()
                 ? Component.translatable("tooltip.earth_lore.gate.locked").withStyle(ChatFormatting.RED)
                 : Component.translatable("tooltip.earth_lore.gate.max_grade",

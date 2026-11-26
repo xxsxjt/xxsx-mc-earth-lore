@@ -69,5 +69,33 @@ public final class Reachability {
         }
         return true;
     }
-}
 
+    /**
+     * Collects {@code targetId} and all upstream prerequisite node IDs reachable from it (both AND and OR branches),
+     * cycle-safe, in BFS discovery order so UI and tests can highlight the exact learning path.
+     */
+    public static java.util.Set<String> prerequisiteChain(java.util.Map<String, NodeDef> nodes, String targetId) {
+        java.util.LinkedHashSet<String> chain = new java.util.LinkedHashSet<>();
+        if (nodes == null || targetId == null || !nodes.containsKey(targetId)) {
+            return chain;
+        }
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
+        chain.add(targetId);
+        queue.add(targetId);
+        while (!queue.isEmpty()) {
+            String cur = queue.poll();
+            NodeDef def = nodes.get(cur);
+            if (def == null) {
+                continue;
+            }
+            for (Prereq prereq : def.requires()) {
+                for (String member : prereq.members()) {
+                    if (nodes.containsKey(member) && chain.add(member)) {
+                        queue.add(member);
+                    }
+                }
+            }
+        }
+        return chain;
+    }
+}

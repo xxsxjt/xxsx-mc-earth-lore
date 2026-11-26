@@ -9,6 +9,9 @@ import com.xxsx.earthlore.research.ResearchTableBlock;
 import com.xxsx.earthlore.research.ResearchTableBlockEntity;
 import com.xxsx.earthlore.research.ResearchTableMenu;
 import com.xxsx.earthlore.study.LiteratureItem;
+import com.xxsx.earthlore.study.OmniscienceCodexItem;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.Rarity;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -75,6 +78,9 @@ public final class LoreContent {
             props -> new LiteratureItem(props, false), props -> props.stacksTo(1));
     public static final DeferredItem<LiteratureItem> TREATISE = ITEMS.registerItem("treatise",
             props -> new LiteratureItem(props, true), props -> props.stacksTo(1));
+    public static final DeferredItem<OmniscienceCodexItem> OMNISCIENCE_CODEX = ITEMS.registerItem("omniscience_codex",
+            OmniscienceCodexItem::new,
+            props -> props.stacksTo(1).rarity(Rarity.EPIC).component(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ResearchTableBlockEntity>> RESEARCH_TABLE_BE =
             BLOCK_ENTITY_TYPES.register("research_table",
@@ -89,6 +95,7 @@ public final class LoreContent {
                     .displayItems((params, output) -> {
                         output.accept(RESEARCH_TABLE_ITEM.get());
                         output.accept(BLANK_NOTES.get());
+                        output.accept(OMNISCIENCE_CODEX.get());
                         LiteratureItem.creativeNotes(params.holders(), output::accept);
                     })
                     .build());

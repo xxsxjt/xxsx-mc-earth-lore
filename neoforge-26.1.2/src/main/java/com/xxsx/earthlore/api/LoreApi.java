@@ -142,6 +142,11 @@ public final class LoreApi {
         Conditions.register(key, provider);
     }
 
+    /** Numeric player-state condition (e.g. "realm") evaluated for study & research prerequisites. */
+    public static void registerPlayerCondition(String key, PlayerConditionProvider provider) {
+        Conditions.registerPlayer(key, provider);
+    }
+
     /** Teaching offers for a subject mod's own merchant entity (A-014 rule 5). */
     public static List<MerchantOffer> teachingOffers(ServerLevel level, EntityType<?> type) {
         return TeachingService.entityOffers(type);
