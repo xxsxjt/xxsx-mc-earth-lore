@@ -3,6 +3,6 @@
   "order": 1,
   "color": "#2EA38F",
   "icon": "minecraft:glass_bottle",
-  "home_mod": "earth_on_minecraft",
+  "home_mod": "earth_core",
   "has_root": true
 }
