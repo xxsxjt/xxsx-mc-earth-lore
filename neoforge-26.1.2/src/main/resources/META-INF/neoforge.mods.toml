@@ -4,7 +4,7 @@ license="AGPL-3.0-only"
 
 [[mods]]
 modId="earth_lore"
-version="0.2.0"
+version="0.2.1"
 displayName="地球：学识 (Earth: Lore)"
 description='''
 地球系列的学识框架：研究台、文献、知识存档、门禁接口与旧进度迁移入口。本身不含任何学科内容，知识节点由各学科 mod 用数据包提供。

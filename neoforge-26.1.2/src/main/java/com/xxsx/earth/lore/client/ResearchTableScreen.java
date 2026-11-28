@@ -1,5 +1,7 @@
 package com.xxsx.earth.lore.client;
 
+import org.anti_ad.mc.ipn.api.IPNPlayerSideOnly;
+
 import com.xxsx.earth.lore.data.Discipline;
 import com.xxsx.earth.lore.data.ItemReq;
 import com.xxsx.earth.lore.data.LoreCondition;
@@ -51,6 +53,7 @@ import net.neoforged.neoforge.client.network.ClientPacketDistributor;
  * checklist of what the job needs; the server repeats every check when the job starts. Items marked grey
  * (made items, structures and field values) can only be judged by the server.
  */
+@IPNPlayerSideOnly
 public class ResearchTableScreen extends AbstractContainerScreen<ResearchTableMenu> {
     private static final String KEY = "screen.earth_lore.research_table.";
     private static final String[] MODES = {"research", "copy", "compile"};

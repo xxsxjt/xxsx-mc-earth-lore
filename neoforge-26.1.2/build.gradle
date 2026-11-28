@@ -3,7 +3,7 @@ plugins {
     id 'net.neoforged.moddev' version '2.0.148'
 }
 
-version = '0.2.0'
+version = '0.2.1'
 group = 'com.xxsx.earth.lore'
 base.archivesName = 'earth-lore-neoforge-26.1.2'
 
@@ -96,3 +96,15 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
+// Compile-only Inventory Profiles Next (IPN) API stubs (NEVER packaged into output mod JAR)
+sourceSets {
+    ipnApi {
+        java.srcDir 'src/ipnApi/java'
+    }
+}
+
+dependencies {
+    compileOnly sourceSets.ipnApi.output
+    testCompileOnly sourceSets.ipnApi.output
+    testRuntimeOnly sourceSets.ipnApi.output
+}

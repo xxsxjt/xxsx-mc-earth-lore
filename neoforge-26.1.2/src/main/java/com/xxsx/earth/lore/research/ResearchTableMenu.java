@@ -1,5 +1,7 @@
 package com.xxsx.earth.lore.research;
 
+import org.anti_ad.mc.ipn.api.IPNPlayerSideOnly;
+
 import com.xxsx.earth.lore.registry.LoreContent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -14,6 +16,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 /** Menu of the research table; slot indices 0..11 match the block entity. */
+@IPNPlayerSideOnly
 public class ResearchTableMenu extends AbstractContainerMenu {
     public static final int IMAGE_WIDTH = 248;
     public static final int IMAGE_HEIGHT = 216;
