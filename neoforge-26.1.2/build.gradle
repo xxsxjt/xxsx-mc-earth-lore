@@ -75,6 +75,8 @@ test {
 }
 
 jar {
+    // Pre-1.0 unified beta JAR filename (no changing digits); internal mod version stays in project.version / neoforge.mods.toml
+    archiveFileName = "${base.archivesName.get()}-beta.jar"
     preserveFileTimestamps = false
     reproducibleFileOrder = true
     from('../LICENSE') {
@@ -86,7 +88,7 @@ jar {
             'Specification-Vendor'    : 'xxsx',
             'Specification-Version'   : '1',
             'Implementation-Title'    : project.name,
-            'Implementation-Version'  : project.jar.archiveVersion,
+            'Implementation-Version'  : project.version,
             'Implementation-Vendor'   : 'xxsx'
         ])
     }
